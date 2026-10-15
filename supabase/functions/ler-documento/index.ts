@@ -23,8 +23,12 @@ import { encodeBase64 } from "jsr:@std/encoding@1.0.5/base64";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
 const SUPABASE_URL = env("SUPABASE_URL");
-const OR_KEY = env("OPENROUTER_API_KEY");
-const ANT_KEY = env("ANTHROPIC_API_KEY");
+// tira espaços, quebras de linha e caracteres invisíveis que vêm ao colar
+const limpa = (v: string) => v.replace(/[\s\u200B-\u200D\uFEFF]/g, "");
+const OR_KEY = limpa(env("OPENROUTER_API_KEY"));
+const ANT_KEY = limpa(env("ANTHROPIC_API_KEY"));
+// só o final e o tamanho, para conferir com a lista de chaves sem expor a chave
+const pista = (k: string) => k ? `terminada em "…${k.slice(-4)}", com ${k.length} caracteres` : "vazia";
 const PROVEDOR = OR_KEY ? "openrouter" : ANT_KEY ? "anthropic" : "";
 const MODEL = OR_KEY ? (env("IA_MODELO") || "anthropic/claude-sonnet-5.5") : (env("ANTHROPIC_MODEL") || env("IA_MODELO") || "claude-sonnet-5-5");
 const APP_URL = env("APP_URL");
@@ -233,7 +237,8 @@ type Parte = { pdf?: string; img?: string; tipo?: string; texto?: string };
 type Ferramenta = { name: string; description: string; input_schema: Record<string, unknown> };
 
 function erroIA(status: number, msg: string) {
-  if (status === 401 || status === 403) return erro("A chave da IA é inválida ou foi revogada. Confira o secret no GitHub.", 502);
+  const k = PROVEDOR === "openrouter" ? OR_KEY : ANT_KEY;
+  if (status === 401 || status === 403) return erro(`A IA recusou a chave (${msg}). A chave em uso está ${pista(k)}${PROVEDOR === "openrouter" && !k.startsWith("sk-or-") ? " e deveria começar com sk-or-" : ""}. Confira se ela aparece em openrouter.ai, em API Keys.`, 502);
   if (status === 402) return erro("Os créditos da IA acabaram. Recarregue em openrouter.ai/credits e tente de novo.", 402);
   if (status === 429) return erro("Muitas leituras ao mesmo tempo. Tente de novo em instantes.", 429);
   return erro(`A IA não conseguiu ler: ${msg}`, 502);
