@@ -120,7 +120,7 @@ const FERRAMENTA = {
 };
 
 const INSTRUCOES = `Você lê documentos de Seguro Garantia emitidos no Brasil (apólices, endossos, boletos de prêmio, comprovantes, propostas e notas fiscais) para uma assessoria que controla repasses de cocorretagem.
-Extraia os dados do documento e chame a ferramenta registrar_dados uma única vez.
+Extraia os dados do documento e chame a ferramenta registrar_dados uma única vez. Responda SEMPRE chamando a ferramenta, nunca em texto.
 Regras:
 - Copie números e nomes exatamente como aparecem. Não invente: se um dado não constar, use null.
 - Datas em AAAA-MM-DD. Valores em número, com ponto decimal (ex.: 12345.67), sem "R$".
@@ -175,7 +175,7 @@ const FERRAMENTA_EXTRATO = {
 };
 
 const INSTRUCOES_EXTRATO = `Você lê extratos de comissão de corretagem que seguradoras de Seguro Garantia mandam para uma corretora no Brasil.
-Chame a ferramenta registrar_extrato uma única vez, com TODAS as linhas de comissão do extrato.
+Chame a ferramenta registrar_extrato uma única vez, com TODAS as linhas de comissão do extrato. Responda SEMPRE chamando a ferramenta, nunca em texto.
 Regras:
 - Uma entrada em "itens" para cada linha de comissão (apólice, endosso ou parcela). Ignore cabeçalhos, totais, subtotais e linhas de imposto.
 - Copie o número da apólice exatamente como escrito. Se houver número de endosso, coloque em "endosso".
@@ -233,6 +233,13 @@ Deno.serve(async (req) => {
 });
 
 // ---- chamada à IA: OpenRouter (qualquer modelo) ou Anthropic direto ----
+// plano B: se o modelo responder em texto em vez de usar a ferramenta, pega o JSON do texto
+function jsonDoTexto(t: unknown): unknown {
+  const s = Array.isArray(t) ? t.map((x) => (typeof x === "string" ? x : x?.text ?? "")).join("\n") : String(t ?? "");
+  const i = s.indexOf("{"), j = s.lastIndexOf("}");
+  if (i < 0 || j <= i) return null;
+  try { return JSON.parse(s.slice(i, j + 1)); } catch { return null; }
+}
 type Parte = { pdf?: string; img?: string; tipo?: string; texto?: string };
 type Ferramenta = { name: string; description: string; input_schema: Record<string, unknown> };
 
@@ -261,7 +268,8 @@ async function viaOpenRouter(system: string, f: Ferramenta, partes: Parte[], max
       max_tokens: maxTokens,
       messages: [{ role: "system", content: system }, { role: "user", content }],
       tools: [{ type: "function", function: { name: f.name, description: f.description, parameters: f.input_schema } }],
-      tool_choice: { type: "function", function: { name: f.name } },
+      // alguns modelos (ex.: Claude Sonnet 5.5) não aceitam ferramenta obrigatória; as instruções pedem a ferramenta
+      tool_choice: "auto",
     }),
   });
   const out = await res.json().catch(() => ({}));
@@ -271,9 +279,10 @@ async function viaOpenRouter(system: string, f: Ferramenta, partes: Parte[], max
   }
   const ch = out.choices?.[0];
   if (ch?.finish_reason === "length") return erro("O documento é grande demais para uma leitura só. Divida o arquivo e envie em partes.", 413);
-  const args = ch?.message?.tool_calls?.[0]?.function?.arguments;
+  const args = ch?.message?.tool_calls?.find((t: { function?: { name?: string } }) => t.function?.name === f.name)?.function?.arguments ?? ch?.message?.tool_calls?.[0]?.function?.arguments;
   let dados: unknown = null;
   try { dados = typeof args === "string" ? JSON.parse(args) : args; } catch { /* resposta fora do formato */ }
+  if (!dados) dados = jsonDoTexto(ch?.message?.content);
   if (!dados) return erro(`O modelo ${MODEL} não devolveu os dados no formato esperado. Tente de novo ou troque o IA_MODELO.`, 502);
   return json({ dados, modelo: MODEL, provedor: "openrouter", uso: out.usage ?? null });
 }
@@ -286,15 +295,16 @@ async function viaAnthropic(system: string, f: Ferramenta, partes: Parte[], maxT
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": ANT_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, tools: [f], tool_choice: { type: "tool", name: f.name }, messages: [{ role: "user", content }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, tools: [f], tool_choice: { type: "auto" }, messages: [{ role: "user", content }] }),
   });
   const out = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error("anthropic", res.status, JSON.stringify(out).slice(0, 500));
     return erroIA(res.status === 400 && /credit/i.test(out?.error?.message || "") ? 402 : res.status, out?.error?.message || `erro ${res.status}`);
   }
-  const uso = (out.content || []).find((c: { type: string }) => c.type === "tool_use");
+  const uso = (out.content || []).find((c: { type: string; name?: string }) => c.type === "tool_use");
   if (out.stop_reason === "max_tokens") return erro("O documento é grande demais para uma leitura só. Divida o arquivo e envie em partes.", 413);
-  if (!uso) return erro("A IA não devolveu os dados. Tente de novo.", 502);
-  return json({ dados: uso.input, modelo: MODEL, provedor: "anthropic", uso: out.usage ?? null });
+  const dados = uso?.input ?? jsonDoTexto((out.content || []).filter((c: { type: string }) => c.type === "text").map((c: { text: string }) => c.text).join("\n"));
+  if (!dados) return erro("A IA não devolveu os dados. Tente de novo.", 502);
+  return json({ dados, modelo: MODEL, provedor: "anthropic", uso: out.usage ?? null });
 }
