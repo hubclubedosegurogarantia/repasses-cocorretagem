@@ -195,7 +195,9 @@ on conflict (id) do update set vapid_publica = excluded.vapid_publica, vapid_pri
             else:
                 info(f"  {email}: login criado com a SENHA_INICIAL. Peça para trocar em Configurações → Trocar minha senha.")
 
-    saida("url", url); saida("anon", anon or ""); saida("vapid", vpub); saida("app_url", app_url)
+    saida("app_url", app_url)
+    # o site é montado aqui mesmo: o GitHub não deixa passar a chave anon (um JWT) para outra etapa
+    if not LOCAL: montar_site(url, anon, vpub)
     info(f"Pronto. App: {app_url}")
 
 def convidar(url, service, resend, remetente, app_url, email, nome):
@@ -218,8 +220,10 @@ def convidar(url, service, resend, remetente, app_url, email, nome):
 
 # ---------------------------------------------------------------- site
 def site():
-    url, anon, vapid = env("SUPABASE_URL"), env("SUPABASE_ANON_KEY"), env("VAPID_PUBLIC_KEY")
-    if not url or not anon: falha("Faltam a URL e a chave anon do Supabase (a etapa do Supabase não terminou).")
+    montar_site(env("SUPABASE_URL"), env("SUPABASE_ANON_KEY"), env("VAPID_PUBLIC_KEY"))
+
+def montar_site(url, anon, vapid):
+    if not url or not anon: falha("Faltam a URL e a chave anon do Supabase.")
     d = R / "_site"
     if d.exists(): shutil.rmtree(d)
     d.mkdir()
