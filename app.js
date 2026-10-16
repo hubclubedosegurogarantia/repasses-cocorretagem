@@ -688,7 +688,7 @@ function renderTabela(c){
 }
 
 // ---------------- painel de lançamento ----------------
-function blank(){return {apolice:"",numero_susep:"",seguradora:"",tomador:"",modalidade:"",data_emissao:isoDay(today),premio:null,comissao_pct:null,emitida_por:"",lider:"emissora",nivel:"3",repasse_pct:50,valor_repasse:0,valor_manual:false,corretor:"",corretor_cnpj:"",corretor_susep:"",corretor_pix:"",competencia:S.month,parcelas_qtd:1,parcelas:[{numero:1,vencimento:null,premio_parcela:null,valor:0,competencia:S.month,pago:false}],observacao:"",anexos:[]}}
+function blank(){return {apolice:"",numero_susep:"",seguradora:"",tomador:"",modalidade:"",data_emissao:isoDay(today),premio:null,comissao_pct:null,emitida_por:"",lider:"emissora",nivel:"custom",repasse_pct:null,valor_repasse:0,valor_manual:false,corretor:"",corretor_cnpj:"",corretor_susep:"",corretor_pix:"",competencia:S.month,parcelas_qtd:1,parcelas:[{numero:1,vencimento:null,premio_parcela:null,valor:0,competencia:S.month,pago:false}],observacao:"",anexos:[]}}
 function openPanel(id){
   const d=id?S.apolices.find(x=>x.id===id):null;if(id&&!d)return;
   const data=d?{...blank(),...d,anexos:(d.anexos||[]).map(a=>({...a})),parcelas:(d.parcelas&&d.parcelas.length?d.parcelas:[{numero:1,valor:d.valor_repasse,competencia:d.competencia||S.month,pago:false}]).map(p=>({...p}))}:blank();
@@ -738,17 +738,17 @@ function renderPanel(){
           <div class="f"><label for="corretor_cnpj">CNPJ da parceira</label><input id="corretor_cnpj" class="num" inputmode="numeric" value="${esc(d.corretor_cnpj?fmtCnpj(d.corretor_cnpj):"")}" placeholder="00.000.000/0000-00"><span class="hint" id="cnpjHint"></span></div>
           <div class="f"><label for="premio">Prêmio líquido (R$)</label><input id="premio" class="num" inputmode="decimal" value="${esc(moneyInput(d.premio))}" placeholder="0,00"><span class="hint">Sempre o líquido, sem IOF e custo de apólice. A IA lê da apólice.</span></div>
           <div class="f"><label for="comissao_pct">Comissão sobre o prêmio (%)</label><input id="comissao_pct" class="num" inputmode="decimal" value="${esc(numInput(d.comissao_pct))}" placeholder="ex.: 20"><span class="hint" id="comHint"></span></div>
-          <div class="f"><label>Divisão da comissão</label><div class="split"><span><input id="parte_cs" class="num" inputmode="decimal" value="${esc(numInput(d.repasse_pct==null?"":100-d.repasse_pct))}" aria-label="Parte da ${esc(nossoCurto(d))} (%)"><small>${esc(nossoCurto(d))} %</small></span><span><input id="repasse_pct" class="num" inputmode="decimal" value="${esc(numInput(d.repasse_pct))}" aria-label="Parte da parceira (%)"><small>parceira %</small></span></div>
+          <div class="f"><label>Divisão da comissão</label><div class="split"><span><input id="parte_cs" class="num" inputmode="decimal" placeholder="%" required value="${esc(numInput(d.repasse_pct==null?"":100-d.repasse_pct))}" aria-label="Parte da ${esc(nossoCurto(d))} (%)"><small>${esc(nossoCurto(d))} %</small></span><span><input id="repasse_pct" class="num" inputmode="decimal" placeholder="%" required value="${esc(numInput(d.repasse_pct))}" aria-label="Parte da parceira (%)"><small>parceira %</small></span></div>
 </div>
-          <div class="repasse-out full"><div><span>Como fica a conta</span><div class="calc" id="calcBox"></div></div>
-            <div class="f"><label for="valor_repasse">${d.lider==="parceira"?`Total a receber da parceira (R$)`:`Total a pagar à parceira (R$)`}</label><input id="valor_repasse" class="num big" inputmode="decimal" value="${esc(moneyInput(d.valor_repasse))}"><span class="hint" id="valHint">${d.valor_manual?"Ajustado à mão. Apague para voltar ao cálculo.":"Calculado. Pode ajustar à mão."}</span></div></div>
+          <div class="conta-box full"><div class="cb-t">Como fica a conta</div><div id="calcBox"></div>
+            <div class="ajuste" id="ajusteBox"${d.valor_manual||e.ajuste?"":" hidden"}><div class="f"><label for="valor_repasse">${d.lider==="parceira"?`Valor a receber da parceira (R$)`:`Valor a pagar à parceira (R$)`}</label><input id="valor_repasse" class="num" inputmode="decimal" value="${esc(moneyInput(d.valor_repasse))}"><span class="hint" id="valHint">${d.valor_manual?"Ajustado à mão.":"Digite o valor combinado, se for diferente do cálculo."}</span></div></div></div>
           <div class="parc-head full"><div class="f"><label for="parcelas_qtd">Parcelas</label><input id="parcelas_qtd" class="num" type="number" min="1" max="60" value="${d.parcelas_qtd||1}"></div>
             <div class="f"><label for="venc1">${(d.parcelas_qtd||1)>1?"Vencimento da 1ª parcela (boleto)":"Vencimento do boleto"}</label><input id="venc1" type="date" value="${esc(d.parcelas[0]&&d.parcelas[0].vencimento?String(d.parcelas[0].vencimento).slice(0,10):"")}" required></div>
             <p class="hint">A IA lê os vencimentos da apólice ou do boleto. As cobranças saem 1 e 5 dias depois de cada vencimento.</p></div>
           <div class="full" id="parcBox"></div>
         </fieldset></section>
 
-      <details class="step" id="detAp"${openAp?" open":""}><summary><span class="step-n">3</span><div><b>Dados da apólice ${temIA?'<span class="tag">lidos pela IA</span>':""}</b><span>${res.length?res.join(" · "):"Envie a apólice no passo 1 ou toque aqui para preencher à mão."}${faltam.length&&res.length?` <em class="warn-txt">· falta ${faltam.join(" e ")}</em>`:""}</span></div><i class="chev" aria-hidden="true">▾</i></summary>
+      <details class="step" id="detAp"${openAp?" open":""}><summary><span class="step-n">3</span><div><b>Dados da apólice ${temIA?'<span class="tag">lidos pela IA</span>':""}</b><span class="res-fechado">${d.apolice||d.seguradora||d.tomador?esc([d.apolice?"Apólice "+d.apolice:"",d.seguradora,d.tomador?tituloCaso(d.tomador):""].filter(Boolean).join(" · ")):"Envie a apólice no passo 1 ou toque aqui para preencher à mão."}</span><span class="res-aberto">Confira ou corrija o que ${temIA?"a IA leu":"foi preenchido"}.</span>${faltam.length&&res.length?`<em class="warn-txt res-falta">Falta ${faltam.join(" e ")}</em>`:""}</div><i class="chev" aria-hidden="true">▾</i></summary>
         <fieldset>
           <div class="f"><label for="apolice">Nº da apólice (seguradora)</label><input id="apolice" class="num" value="${esc(d.apolice)}" required></div>
           <div class="f"><label for="numero_susep">Nº da apólice (SUSEP)</label><input id="numero_susep" class="num" value="${esc(d.numero_susep||"")}"></div>
@@ -808,13 +808,20 @@ function renderParcelas(){
 }
 function updateCalc(){
   const e=S.editing;if(!e)return;const d=e.data;const box=$("calcBox");if(!box)return;
-  const premio=Number(d.premio)||0,pc=Number(d.comissao_pct)||0,pp=Number(d.repasse_pct)||0,pcs=Math.round((100-pp)*100)/100;
-  const com=Math.round(premio*pc)/100;const parteP=Math.round(com*pp)/100,parteC=Math.round((com-parteP)*100)/100;const cs=esc(nossoCurto(d));
+  const premio=Number(d.premio)||0,pc=Number(d.comissao_pct)||0,temDiv=d.repasse_pct!=null&&!isNaN(d.repasse_pct),pp=Number(d.repasse_pct)||0,pcs=Math.round((100-pp)*100)/100;
+  const com=Math.round(premio*pc)/100;const parteP=Math.round(com*pp)/100,parteC=Math.round((com-parteP)*100)/100;
+  const cs=tituloCaso(nossoCurto(d)),pa=d.corretor?tituloCaso(curtoDe(d.corretor)):"Parceira";
   const rec=d.lider==="parceira";const fluxo=d.valor_manual?Number(d.valor_repasse)||0:(rec?parteC:parteP);
-  box.innerHTML=premio?`<div class="conta"><span>Prêmio <b>${money(premio)}</b> × ${pctFmt(pc)} = comissão <b>${money(com)}</b></span>
-    <span>${cs} ${pctFmt(pcs)} = <b>${money(parteC)}</b> · parceira ${pctFmt(pp)} = <b>${money(parteP)}</b></span>
-    <span class="flow ${rec?"in":"out"}">${rec?`A parceira paga à ${cs}: <b>${money(fluxo)}</b>`:`A ${cs} paga à parceira: <b>${money(fluxo)}</b>`}${d.valor_manual?" (ajustado)":""}${(d.parcelas_qtd||1)>1?` em ${d.parcelas_qtd} parcelas`:""}</span></div>`
-    :`<span class="meta">O cálculo aparece quando o prêmio for lido da apólice (ou preenchido em Dados da apólice).</span>`;
+  const L=(a,b,c)=>`<div class="rc-l${c?" "+c:""}"><span>${a}</span><b>${b}</b></div>`;
+  if(!premio){box.innerHTML=`<p class="meta">A conta aparece quando houver o prêmio líquido e a comissão.</p>`;return}
+  let h=L("Prêmio líquido",money(premio))+L(`Comissão de ${pctFmt(pc)}`,money(com),"tot");
+  if(!temDiv){box.innerHTML=h+`<p class="meta rc-pede">Informe a divisão acima para ver quanto fica com cada uma.</p>`;return}
+  const ps=(d.parcelas||[]).map(p=>Number(p.valor)||0);const n=ps.length||1;const iguais=n>1&&ps.every(v=>Math.abs(v-ps[0])<0.005);
+  h+=`<div class="rc-bar" aria-hidden="true"><i class="sb-cs" style="width:${pcs}%"></i><i class="sb-pa" style="width:${pp}%"></i></div>`
+    +L(`<i class="dot cs"></i>${esc(cs)} · ${pctFmt(pcs)}`,money(parteC))+L(`<i class="dot pa"></i>${esc(pa)} · ${pctFmt(pp)}`,money(parteP));
+  h+=`<div class="rc-res ${rec?"in":"out"}"><div><span>${rec?`${esc(pa)} paga à ${esc(cs)}`:`${esc(cs)} paga à ${esc(pa)}`}</span><small>${n>1?`em ${n} parcelas${iguais?` de ${money(ps[0])}`:""}`:"parcela única"}${d.valor_manual?" · valor ajustado à mão":""}</small></div><b>${money(fluxo)}</b></div>`
+    +`<div class="rc-act">${d.valor_manual?`<button type="button" class="linkbtn" data-action="ajusteOff">Voltar ao valor calculado</button>`:`<button type="button" class="linkbtn" data-action="ajusteOn">Ajustar o valor à mão</button>`}</div>`;
+  box.innerHTML=h;
 }
 
 // ---------------- documentos ----------------
@@ -952,10 +959,10 @@ function aplicarIA(r,a){
   {const dup=dupApolice(D,e.id);if(dup)avisos.push(`A apólice ${D.apolice} já foi lançada (${dup.corretor||"sem corretora"}, ${dateBR(dup.data_emissao)}). Confira se não é repetida.`)}
   if(r.premio_total&&premio==null)avisos.push(`O documento mostra só o prêmio total (${money(r.premio_total)}), que inclui IOF e custos. Informe o prêmio líquido na parte 2: a comissão é sempre sobre o líquido.`);
   else if(premio!=null&&r.premio_total&&Math.abs(r.premio_total-premio)>0.009)avisos.push(`Prêmio líquido ${money(premio)} (o total com IOF e custos é ${money(r.premio_total)}). A comissão usa o líquido.`);
-  if(r.observacao)avisos.push(r.observacao);
-  e.ai={arquivo:a.nome,tipo:r.tipo_documento,filled,conflitos,incertos:(r.campos_incertos||[]).filter(Boolean),avisos,vig:[r.vigencia_inicio,r.vigencia_fim],is:r.importancia_segurada,segurado:r.segurado_nome};
+  e.ai={arquivo:a.nome,tipo:r.tipo_documento,filled,conflitos,incertos:(r.campos_incertos||[]).filter(Boolean),avisos,obs:r.observacao||"",vig:[r.vigencia_inicio,r.vigencia_fim],is:r.importancia_segurada,segurado:r.segurado_nome};
   e.aiFilled=new Set(filled);
-  if(!D.corretor)e.focusNext="corretor";else if(D.comissao_pct==null)e.focusNext="comissao_pct";
+  // a divisão nunca vem na apólice: o cursor já vai para ela
+  if(D.repasse_pct==null)e.focusNext="parte_cs";else if(!D.corretor)e.focusNext="corretor";else if(D.comissao_pct==null)e.focusNext="comissao_pct";
   renderPanel();
   toast(filled.length?`IA preencheu ${filled.length} campo${filled.length>1?"s":""}. Confira os destacados.`:conflitos.length?"A IA encontrou valores diferentes dos digitados. Veja o quadro no topo.":"A IA leu o documento, mas não havia campos vazios para preencher.");
 }
@@ -963,14 +970,28 @@ function renderAiBox(){
   const box=$("aiBox");const e=S.editing;if(!box||!e)return;
   if(e.aiFilled)e.aiFilled.forEach(f=>{const el=$(f);if(el)el.classList.add("ai-filled")});
   const A=e.ai;if(!A){box.innerHTML="";return}
-  const nome=f=>AI_CAMPOS[f]||f;const fmt=(f,v)=>f==="lider"?(v==="parceira"?"parceira é a líder":emisCurto()+" é a líder"):f==="premio"?money(v):f==="comissao_pct"?pctFmt(v):f==="data_emissao"?dateBR(v):f==="tomador_cnpj"?fmtCnpj(v):String(v);
-  const incertos=A.incertos.map(x=>({numero_apolice:"apolice",seguradora_razao_social:"seguradora",seguradora_cnpj:"seguradora",tomador_nome:"tomador",premio_liquido:"premio",comissao_percentual:"comissao_pct"}[x]||x)).filter(x=>AI_CAMPOS[x]);
-  box.innerHTML=`<div class="ai-box"><div class="ai-head"><b>Lido pela IA</b><span class="meta">${esc(A.arquivo)} · ${esc(AI_CAT[A.tipo]||"documento")}</span><span class="spacer"></span><button type="button" class="iconbtn" data-action="aiClose" aria-label="Fechar quadro da IA">✕</button></div>
-    <p>${A.filled.length?`Preencheu: ${A.filled.map(nome).join(", ")}. Os campos destacados em dourado vieram da IA; confira antes de salvar.`:"Nenhum campo vazio foi preenchido."}</p>
-    ${incertos.length?`<p class="ai-warn">Leitura incerta em: ${[...new Set(incertos)].map(nome).join(", ")}. Confira no documento.</p>`:""}
-    ${A.conflitos.length?`<div class="ai-conf"><span class="meta">Valores diferentes do que está no formulário:</span>${A.conflitos.map((c,i)=>`<div class="ai-c"><span><b>${esc(nome(c.f))}:</b> documento diz <b>${esc(fmt(c.f,c.v))}</b> · formulário tem ${esc(fmt(c.f,c.atual))}</span><button type="button" class="btn small" data-action="aiUse" data-i="${i}">Usar o do documento</button></div>`).join("")}</div>`:""}
-    ${A.avisos.map(t=>`<p class="ai-warn">${esc(t)}</p>`).join("")}
-    ${A.vig[0]||A.vig[1]||A.is||A.segurado?`<p class="meta">${A.segurado?`Segurado: ${esc(String(A.segurado).replace(/\.$/,""))}. `:""}${A.vig[0]||A.vig[1]?`Vigência: ${esc(dateBR(A.vig[0]))} a ${esc(dateBR(A.vig[1]))}. `:""}${A.is?`Importância segurada: ${esc(money(A.is))}.`:""}</p>`:""}
+  const D=e.data;const nome=f=>AI_CAMPOS[f]||f;
+  const fmt=(f,v)=>f==="lider"?(v==="parceira"?"parceira é a líder":emisCurto()+" é a líder"):f==="premio"?money(v):f==="comissao_pct"?pctFmt(v):f==="data_emissao"?dateBR(v):f==="tomador_cnpj"?fmtCnpj(v):String(v);
+  const inc=new Set(A.incertos.map(x=>({numero_apolice:"apolice",numero_apolice_susep:"numero_susep",seguradora_razao_social:"seguradora",seguradora_cnpj:"seguradora",tomador_nome:"tomador",tomador_cnpj:"tomador",premio_liquido:"premio",comissao_percentual:"comissao_pct",parcelas:"parcelas_qtd",corretoras:"corretor"}[x]||x)));
+  const ps=D.parcelas||[];const p1=ps[0]&&ps[0].vencimento;
+  const parcTxt=ps.length>1?`${ps.length} parcelas${p1?` · 1ª em ${dateBR(p1)}`:""}`:p1?`à vista · vence ${dateBR(p1)}`:"";
+  // o que foi lido, em linhas curtas (rótulo → valor)
+  const linhas=[["apolice","Apólice",D.apolice],["numero_susep","Apólice SUSEP",D.numero_susep],["seguradora","Seguradora",D.seguradora],
+    ["tomador","Tomador",D.tomador?D.tomador+(D.tomador_cnpj?" · "+fmtCnpj(D.tomador_cnpj):""):""],["premio","Prêmio líquido",D.premio!=null?money(D.premio):""],
+    ["comissao_pct","Comissão",D.comissao_pct!=null?pctFmt(D.comissao_pct):""],["parcelas_qtd","Parcelas",parcTxt],
+    ["corretor","Parceira",D.corretor?D.corretor+(D.corretor_cnpj?" · "+fmtCnpj(D.corretor_cnpj):""):""],
+    ["lider","Quem recebe da seguradora",D.lider==="parceira"?(D.corretor?tituloCaso(curtoDe(D.corretor)):"a parceira"):tituloCaso(nossoCurto(D))]].filter(x=>x[2]);
+  // o que ainda falta para salvar certo
+  const faltam=[];if(!D.corretor)faltam.push("Corretora parceira");else if(!normCnpj(D.corretor_cnpj||""))faltam.push("CNPJ da parceira");
+  if(D.premio==null)faltam.push("Prêmio líquido");if(D.comissao_pct==null)faltam.push("Comissão (%)");if(!p1)faltam.push("Vencimento da 1ª parcela");
+  const extra=[A.segurado?`Segurado: ${String(A.segurado).replace(/\.$/,"")}`:"",A.vig[0]||A.vig[1]?`Vigência: ${dateBR(A.vig[0])} a ${dateBR(A.vig[1])}`:"",A.is?`Importância segurada: ${money(A.is)}`:"",A.obs||""].filter(Boolean);
+  box.innerHTML=`<div class="ai-box">
+    <div class="ai-head"><span class="ai-ok" aria-hidden="true">✓</span><b>A IA leu ${A.tipo&&A.tipo!=="apolice"?"o "+esc((AI_CAT[A.tipo]||"documento").toLowerCase()):"a apólice"}</b><span class="spacer"></span><button type="button" class="iconbtn" data-action="aiClose" aria-label="Fechar quadro da IA">✕</button></div>
+    ${linhas.length?`<dl class="ai-grid">${linhas.map(([f,l,v])=>`<div${inc.has(f)?' class="inc"':""}><dt>${esc(l)}</dt><dd>${esc(v)}${inc.has(f)?'<span class="ai-tag">conferir</span>':""}</dd></div>`).join("")}</dl>`:`<p class="meta">Nenhum dado da apólice foi encontrado neste arquivo.</p>`}
+    ${faltam.length?`<div class="ai-falta"><span>Falta você preencher</span>${faltam.map(x=>`<em>${esc(x)}</em>`).join("")}</div>`:`<p class="ai-pronto">Tudo preenchido. Confira e salve.</p>`}
+    ${A.conflitos.length?`<div class="ai-conf"><span class="meta">O documento diz diferente do formulário:</span>${A.conflitos.map((c,i)=>`<div class="ai-c"><span><b>${esc(nome(c.f))}:</b> documento <b>${esc(fmt(c.f,c.v))}</b> · formulário ${esc(fmt(c.f,c.atual))}</span><button type="button" class="btn small" data-action="aiUse" data-i="${i}">Usar o do documento</button></div>`).join("")}</div>`:""}
+    ${A.avisos.length?`<ul class="ai-avisos">${A.avisos.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}
+    ${extra.length?`<details class="ai-mais"><summary>Mais informações do documento</summary>${extra.map(t=>`<p>${esc(t)}</p>`).join("")}</details>`:""}
   </div>`;
 }
 
@@ -984,7 +1005,7 @@ async function save(){
   if(d.tomador_cnpj&&!cnpjValido(d.tomador_cnpj)){toast("O CNPJ do tomador não é válido. Confira os números ou deixe em branco.");$("tomador_cnpj").focus();return}
   if(d.corretor_cnpj&&!cnpjValido(d.corretor_cnpj)){toast("O CNPJ da corretora não é válido. Confira os números ou deixe em branco.");$("corretor_cnpj").focus();return}
   if(e.uploading.length){toast("Aguarde o envio dos documentos terminar.");return}
-  if(d.repasse_pct==null||d.repasse_pct<0||d.repasse_pct>100){toast("Informe a divisão da comissão (parte da parceira entre 0 e 100%).");$("repasse_pct").focus();return}
+  if(d.repasse_pct==null||d.repasse_pct<0||d.repasse_pct>100){toast("Informe a divisão da comissão: a parte da CS e a da parceira, em %.");$("parte_cs").focus();return}
   {const dup=dupApolice(d,e.id);if(dup&&e.dupOk!==d.apolice){e.dupOk=d.apolice;toast(`A apólice ${d.apolice} já foi lançada (${dup.corretor||"sem corretora"}). Se não for repetida, clique em Salvar de novo.`);return}}
   recalcParcelas(d);
   const row={apolice:d.apolice,numero_susep:d.numero_susep||null,data_emissao:d.data_emissao||null,seguradora:d.seguradora||null,modalidade:d.modalidade||null,tomador:d.tomador||null,tomador_cnpj:d.tomador_cnpj||null,
@@ -1802,6 +1823,9 @@ document.addEventListener("click",ev=>{
       document.querySelectorAll(".chipbtn").forEach(b=>b.classList.toggle("on",b===t));
       if(!d.valor_manual){d.valor_repasse=calcRepasse(d.premio,d.comissao_pct,d.repasse_pct,d.lider);$("valor_repasse").value=moneyInput(d.valor_repasse)}recalcParcelas(d);renderParcelas();updateCalc();break}
     case "aiRead":aiLer(+t.dataset.i);break;
+    case "ajusteOn":{const e=S.editing;if(!e)break;e.ajuste=true;const b=$("ajusteBox");if(b){b.hidden=false;const v=$("valor_repasse");v.focus();v.select()}break}
+    case "ajusteOff":{const e=S.editing;if(!e)break;readForm();const d=e.data;d.valor_manual=false;e.ajuste=false;d.valor_repasse=calcRepasse(d.premio,d.comissao_pct,d.repasse_pct,d.lider);
+      $("valor_repasse").value=moneyInput(d.valor_repasse);$("ajusteBox").hidden=true;$("valHint").textContent="Digite o valor combinado, se for diferente do cálculo.";recalcParcelas(d);renderParcelas();updateCalc();break}
     case "aiClose":if(S.editing){S.editing.ai=null;renderAiBox()}break;
     case "aiUse":{const e=S.editing;if(!e||!e.ai)break;readForm();const c=e.ai.conflitos.splice(+t.dataset.i,1)[0];if(c){e.data[c.f]=c.v;e.ai.filled.push(c.f);(e.aiFilled=e.aiFilled||new Set()).add(c.f);
       if(["premio","comissao_pct","lider"].includes(c.f)&&!e.data.valor_manual)e.data.valor_repasse=calcRepasse(e.data.premio,e.data.comissao_pct,e.data.repasse_pct,e.data.lider);recalcParcelas(e.data)}renderPanel();break}
@@ -1849,10 +1873,11 @@ document.addEventListener("input",ev=>{
     d.premio=numOrNull(gv("premio"));d.comissao_pct=numOrNull(gv("comissao_pct"));d.repasse_pct=numOrNull(gv("repasse_pct"));d.nivel=nivelDe(d.repasse_pct);
     document.querySelectorAll(".chipbtn").forEach(b=>b.classList.toggle("on",Number(b.dataset.v)===Number(d.repasse_pct)));
     if(id==="valor_repasse"){const v=numOrNull(gv("valor_repasse"));d.valor_manual=v!=null;d.valor_repasse=v==null?calcRepasse(d.premio,d.comissao_pct,d.repasse_pct,d.lider):v;
-      $("valHint").textContent=d.valor_manual?"Ajustado à mão. Apague para voltar ao cálculo.":"Calculado. Pode ajustar à mão."}
+      $("valHint").textContent=d.valor_manual?"Ajustado à mão.":"Digite o valor combinado, se for diferente do cálculo."}
     else if(!d.valor_manual){d.valor_repasse=calcRepasse(d.premio,d.comissao_pct,d.repasse_pct,d.lider);$("valor_repasse").value=moneyInput(d.valor_repasse)}
     recalcParcelas(d);renderParcelas();updateCalc();
   }
+  if(S.editing.ai&&["corretor","corretor_cnpj","premio","comissao_pct","venc1"].includes(id)){clearTimeout(S.editing.aiT);S.editing.aiT=setTimeout(()=>{if(S.editing&&S.editing.ai){readForm();renderAiBox()}},400)}
   if(id==="corretor"){const nome=ev.target.value;const c=corretoraPorNome(nome);const ci=$("corretor_cnpj");if(c&&c.cnpj&&!ci.value){ci.value=fmtCnpj(c.cnpj)}
     cnpjHint()}
   if(id==="corretor_cnpj"){const cn=normCnpj(ev.target.value);if(cn.length===14){const c=corretoraPorCnpj(cn);const ni=$("corretor");if(c&&!ni.value)ni.value=c.nome;ev.target.value=fmtCnpj(cn)}cnpjHint()}
