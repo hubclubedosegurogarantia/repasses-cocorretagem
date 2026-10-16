@@ -395,7 +395,7 @@ function renderDirecao(c,dir){
   requestAnimationFrame(()=>{const st=c.querySelector(".mstrip"),on=st&&st.querySelector(".mchip.on");if(on)st.scrollLeft=on.offsetLeft-st.offsetLeft-(st.clientWidth-on.offsetWidth)/2});
   const corpo=md.length?secaoDirecao(md,dir)
     :`<div class="empty"><h3>Nada ${rec?"a receber":"a pagar"} em ${esc(monthName(S.month))}</h3><p>Escolha outro mês acima. Os meses com ponto vermelho têm atraso.</p></div>`;
-  c.innerHTML=`<div class="dir-bar">${faixaMeses(dir)}${md.length?`<button class="linkbtn det-tg" data-action="detToggle" aria-pressed="${S.det}">${S.det?"Menos detalhes":"Mais detalhes"}</button>`:""}</div>${rec?"":`<div class="ext-cta"><span>Chegou o extrato de comissão da seguradora?</span><button class="btn small" data-action="extrato">Ler extrato</button></div>`}${corpo}`;
+  c.innerHTML=`<div class="dir-bar">${faixaMeses(dir)}<span class="dir-acts">${rec?"":`<button class="btn small" data-action="extrato" title="Leia o extrato de comissão que a seguradora mandou">Ler extrato</button>`}${md.length?`<button class="linkbtn det-tg" data-action="detToggle" aria-pressed="${S.det}">${S.det?"Menos detalhes":"Mais detalhes"}</button>`:""}</span></div>${corpo}`;
 }
 
 // ---------------- dashboard ----------------
@@ -419,33 +419,55 @@ function renderDashboard(P){
       <rect class="hit" x="${L+cw*i}" y="${T}" width="${cw}" height="${H-T-B}" fill="transparent"/>${barra(cx-bw-gap/2,x.pagar,"s-out")}${barra(cx+gap/2,x.receber,"s-in")}
       <text x="${cx}" y="${H-10}" text-anchor="middle" class="axis${x.m===S.month?" cur":""}">${esc(monthShort(x.m).split("/")[0])}</text></g>`}).join("");
   const rk={};S.docs.filter(d=>String(d.competencia).startsWith(ano)).forEach(d=>{const k=corrKey(d);const r=rk[k]=rk[k]||{nome:d.corretor,p:0,r:0};if(dirDe(d)==="receber")r.r+=Number(d.valor_repasse)||0;else r.p+=Number(d.valor_repasse)||0});
-  const rank=Object.values(rk).map(r=>({...r,v:r.p+r.r})).sort((a,b)=>b.v-a.v).slice(0,6);const rmax=Math.max(1,...rank.map(r=>r.v));
+  const rankTodo=Object.values(rk).map(r=>({...r,v:r.p+r.r})).sort((a,b)=>b.v-a.v);const rank=S.rankAll?rankTodo:rankTodo.slice(0,5);const rmax=Math.max(1,...rank.map(r=>r.v));
   const semApolice=new Set(S.docs.filter(d=>!(d.anexos||[]).some(a=>a.categoria==="Apólice")).map(d=>d.id)).size;
   const mesNome=monthName(S.month).split(" ")[0].toLowerCase();
   P.innerHTML=`<section class="summary">
-      <div class="stat hl"><label>A pagar em ${esc(mesNome)}</label><div class="v">${money(sumv(pg))}</div><small>${pg.length} parcela${pg.length!==1?"s":""} às parceiras</small></div>
-      <div class="stat in"><label>A receber em ${esc(mesNome)}</label><div class="v">${money(sumv(rc))}</div><small>${rc.length} parcela${rc.length!==1?"s":""} das parceiras líderes</small></div>
-      <div class="stat ${od.length?"bad":""}"><label>Em atraso</label><div class="v">${money(sumv(od))}</div><small>${od.length} parcela${od.length!==1?"s":""} de meses anteriores</small></div>
-      <div class="stat"><label>Próximo lembrete</label><div class="v txt">${prox?esc(prox.toLocaleDateString("pt-BR",{day:"2-digit",month:"short"}).replace(".","")):"—"}</div><small>${prox?esc(prox.toLocaleDateString("pt-BR",{weekday:"long"}))+` às ${String(S.cfgL.hora).padStart(2,"0")}h`:"configure em Notificações"}</small></div>
+      <button type="button" class="stat hl go" data-action="kpi" data-go="pagar"><label>A pagar em ${esc(mesNome)}</label><div class="v">${money(sumv(pg))}</div><small>${pg.length} parcela${pg.length!==1?"s":""} às parceiras</small></button>
+      <button type="button" class="stat in go" data-action="kpi" data-go="receber"><label>A receber em ${esc(mesNome)}</label><div class="v">${money(sumv(rc))}</div><small>${rc.length} parcela${rc.length!==1?"s":""} das parceiras líderes</small></button>
+      <button type="button" class="stat go ${od.length?"bad":""}" data-action="kpi" data-go="atraso"><label>Em atraso</label><div class="v">${money(sumv(od))}</div><small>${od.length?`${od.length} parcela${od.length!==1?"s":""} de meses anteriores`:"nada atrasado"}</small></button>
+      <button type="button" class="stat go" data-action="kpi" data-go="notif"><label>Próximo lembrete</label><div class="v txt">${prox?esc(prox.toLocaleDateString("pt-BR",{day:"2-digit",month:"short"}).replace(".","")):"—"}</div><small>${prox?esc(prox.toLocaleDateString("pt-BR",{weekday:"long"}))+` às ${String(S.cfgL.hora).padStart(2,"0")}h`:"configure em Notificações"}</small></button>
     </section>
     <div class="dash">
-      <section class="cardbox wide"><div class="cb-head"><h3>Cocorretagem por competência</h3><span class="meta">Últimos 12 meses até ${esc(monthShort(S.month))}</span><span class="spacer"></span><span class="legend"><i class="lg s-out"></i>A pagar <i class="lg s-in"></i>A receber</span></div>
-        ${vazio?`<p class="meta" style="padding:28px 0;text-align:center">Nenhuma cocorretagem nos últimos 12 meses.</p>`:`<div class="chartwrap"><svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Cocorretagem a pagar e a receber por competência">
+      <section class="cardbox wide chartbox"><div class="cb-head"><h3>Comissões mês a mês</h3><span class="meta">A pagar e a receber · 12 meses até ${esc(monthShort(S.month))}</span><span class="spacer"></span><span class="legend"><i class="lg s-out"></i>A pagar <i class="lg s-in"></i>A receber</span></div>
+        ${vazio?`<p class="meta" style="padding:28px 0;text-align:center">Nenhuma cocorretagem nos últimos 12 meses.</p>`:`<div class="chartwrap"><svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Comissões a pagar e a receber, mês a mês">
           ${ticks.map(t=>`<line x1="${L}" x2="${W-R}" y1="${y(t)}" y2="${y(t)}" class="grid"/><text x="${L-8}" y="${y(t)+4}" text-anchor="end" class="axis">${t?"R$ "+kfmt(t):"0"}</text>`).join("")}
           ${bars}</svg><div class="tip" id="tip" hidden></div></div>`}
-        <details class="tableview"><summary>Ver em tabela</summary><div class="tablebox"><table><thead><tr><th>Competência</th><th class="r">Parcelas</th><th class="r">A pagar</th><th class="r">em aberto</th><th class="r">A receber</th><th class="r">em aberto</th></tr></thead><tbody>${serie.map(x=>`<tr><td>${esc(monthName(x.m))}</td><td class="r num">${x.n}</td><td class="r num">${money(x.pagar)}</td><td class="r num">${money(x.pAberto)}</td><td class="r num">${money(x.receber)}</td><td class="r num">${money(x.rAberto)}</td></tr>`).join("")}</tbody></table></div></details>
+        <details class="tableview"><summary>Ver em tabela</summary><div class="tablebox"><table><thead><tr><th>Mês</th><th class="r">Parcelas</th><th class="r">A pagar</th><th class="r">em aberto</th><th class="r">A receber</th><th class="r">em aberto</th></tr></thead><tbody>${serie.map(x=>`<tr><td>${esc(monthName(x.m))}</td><td class="r num">${x.n}</td><td class="r num">${money(x.pagar)}</td><td class="r num">${money(x.pAberto)}</td><td class="r num">${money(x.receber)}</td><td class="r num">${money(x.rAberto)}</td></tr>`).join("")}</tbody></table></div></details>
       </section>
       <section class="cardbox"><div class="cb-head"><h3>Parceiras com mais cocorretagem em ${ano}</h3><span class="meta">A pagar + a receber</span></div>
-        ${rank.length?`<ul class="rank">${rank.map(r=>`<li><div class="rk-top"><span class="rk-name">${esc(r.nome)}</span><span class="num">${money(r.v)}</span></div><div class="rk-bar"><i class="s-out" style="width:${r.p/rmax*100}%"></i><i class="s-in" style="width:${r.r/rmax*100}%"></i></div><div class="rk-sub">${r.p?`pagar ${money(r.p)}`:""}${r.p&&r.r?" · ":""}${r.r?`receber ${money(r.r)}`:""}</div></li>`).join("")}</ul>`:`<p class="meta">Nenhum lançamento em ${ano}.</p>`}
+        ${rank.length?`<ul class="rank">${rank.map(r=>`<li><div class="rk-top"><span class="rk-name">${esc(r.nome)}</span><span class="num">${money(r.v)}</span></div><div class="rk-bar"><i class="s-out" style="width:${r.p/rmax*100}%"></i><i class="s-in" style="width:${r.r/rmax*100}%"></i></div><div class="rk-sub">${r.p?`pagar ${money(r.p)}`:""}${r.p&&r.r?" · ":""}${r.r?`receber ${money(r.r)}`:""}</div></li>`).join("")}</ul>
+          ${rankTodo.length>5?`<button type="button" class="linkbtn rk-mais" data-action="rankMais">${S.rankAll?"Ver menos":`Ver mais (${rankTodo.length-5})`}</button>`:""}`:`<p class="meta">Nenhum lançamento em ${ano}.</p>`}
       </section>
-      <section class="cardbox"><div class="cb-head"><h3>Pendências</h3><span class="meta">Toque para ver a lista</span></div>
-        <div class="pend">
-          <button class="pend-item${od.length?" bad":""}" data-action="pendGo" data-f="atrasados"><b class="num">${od.length}</b><span>parcelas em atraso (a pagar ou a receber)</span></button>
+      ${proximasAcoes()}
 
-        </div>
-      </section>
     </div>`;
   P._serie=serie;
+}
+// ---- próximas ações: o que pagar ou cobrar agora (a comissão cai 1 dia depois do vencimento do boleto) ----
+function proximasAcoes(){
+  const hoje=isoDay(today),lim=addDias(hoje,7);
+  const it=S.docs.filter(d=>!d.pago&&d.vencimento).map(d=>{const cai=diaUtil(addDias(String(d.vencimento).slice(0,10),1));return {d,cai,rec:dirDe(d)==="receber"}});
+  const grupos=[
+    {k:"hoje",t:"Hoje",l:it.filter(x=>x.cai===hoje)},
+    {k:"aberto",t:"Em aberto · a comissão já caiu",l:it.filter(x=>x.cai<hoje).sort((a,b)=>a.cai.localeCompare(b.cai))},
+    {k:"prox",t:"Próximos 7 dias",l:it.filter(x=>x.cai>hoje&&x.cai<=lim).sort((a,b)=>a.cai.localeCompare(b.cai))}];
+  const dias=x=>Math.round((new Date(hoje+"T12:00:00")-new Date(x.cai+"T12:00:00"))/864e5);
+  const linha=(x,g)=>{const d=x.d,nome=parceiraCurta(d),rec=x.rec;
+    const tit=g==="hoje"?(rec?`Cobrar ${nome}`:`Pagar ${nome}`):g==="aberto"?(rec?`Recebeu de ${nome}?`:`Pagou ${nome}?`):(rec?`Receber de ${nome}`:`Pagar ${nome}`);
+    const quando=g==="hoje"?"a comissão cai hoje":g==="aberto"?`a comissão caiu há ${dias(x)} dia${dias(x)!==1?"s":""}`:`a comissão cai ${diaCurto(x.cai).toLowerCase()}`;
+    const atr=g==="aberto"&&venceuHaMais5(d);
+    return `<li class="pa-it ${rec?"in":"out"}${atr?" late":""}"><i class="pa-ic" aria-hidden="true">${rec?"↙":"↗"}</i>
+      <div class="pa-tx" data-action="edit" data-id="${esc(d.id)}" tabindex="0"><b>${esc(tit)}</b><small>${esc(quando)} · apólice ${esc(d.apolice||"s/ nº")}${d.parcelas_total>1?` · parcela ${d.parcela_num}/${d.parcelas_total}`:""}</small></div>
+      <span class="pa-v num">${money(d.valor_repasse)}</span>
+      <span class="pa-bt">${rec&&g!=="prox"?`<button type="button" class="btn small ghost" data-action="copyCob" data-pid="${esc(d.pid||"")}">Copiar cobrança</button>`:""}${g!=="prox"?`<button type="button" class="btn small primary" data-action="confirmParc" data-pid="${esc(d.pid||"")}" data-rec="${rec?1:""}">${rec?"Já recebi":"Já paguei"}</button>`:""}</span></li>`};
+  const MAX=4;const tot=grupos.reduce((a,g)=>a+g.l.length,0);
+  return `<section class="cardbox acoes"><div class="cb-head"><h3>Próximas ações</h3><span class="meta">${tot?"O que pagar e cobrar, pelo vencimento de cada boleto":"Tudo em dia"}</span></div>
+    ${tot?grupos.filter(g=>g.l.length).map(g=>{const all=S.acoesMais===g.k;const l=all?g.l:g.l.slice(0,MAX);
+      return `<div class="pa-g ${g.k}"><div class="pa-h">${esc(g.t)} <span class="num">${g.l.length}</span></div><ul class="pa-l">${l.map(x=>linha(x,g.k)).join("")}</ul>
+        ${g.l.length>MAX?`<button type="button" class="linkbtn pa-mais" data-action="acoesMais" data-k="${g.k}">${all?"Ver menos":`Ver mais (${g.l.length-MAX})`}</button>`:""}</div>`}).join("")
+    :`<p class="pa-vazio">Nenhum pagamento ou cobrança para agora. Os próximos aparecem aqui 7 dias antes.</p>`}
+  </section>`;
 }
 function showTip(g){
   const P=$("page");const serie=P&&P._serie;const tip=$("tip");if(!serie||!tip)return;
@@ -637,8 +659,10 @@ async function loadLog(){
 function secaoDirecao(md,dir){
     const groups={};
     md.filter(d=>dirDe(d)===dir).forEach(d=>{const k=grupoKey(d);(groups[k]=groups[k]||{name:d.corretor||"Sem corretora",cnpj:"",pix:"",items:[]}).items.push(d);if(d.corretor_cnpj)groups[k].cnpj=d.corretor_cnpj});
-    const list=Object.entries(groups).map(([k,g])=>{g.k=k;g.open=g.items.filter(d=>!d.pago);g.openTot=g.open.reduce((a,d)=>a+(+d.valor_repasse||0),0);g.tot=g.items.reduce((a,d)=>a+(+d.valor_repasse||0),0);return g})
-      .sort((a,b)=>(b.open.length>0)-(a.open.length>0)||b.openTot-a.openTot||a.name.localeCompare(b.name));
+    const list=Object.entries(groups).map(([k,g])=>{g.k=k;g.open=g.items.filter(d=>!d.pago);g.openTot=g.open.reduce((a,d)=>a+(+d.valor_repasse||0),0);g.tot=g.items.reduce((a,d)=>a+(+d.valor_repasse||0),0);
+        g.atraso=g.open.some(emAtraso);g.prox=g.open.map(d=>String(d.vencimento||"9999")).sort()[0]||"9999";return g})
+      // urgência: atrasadas primeiro, depois quem vence antes; quitadas por último
+      .sort((a,b)=>(b.open.length>0)-(a.open.length>0)||(b.atraso-a.atraso)||a.prox.localeCompare(b.prox)||b.openTot-a.openTot||a.name.localeCompare(b.name));
     if(!list.length)return "";
     const rec=dir==="receber";const tot=list.reduce((a,g)=>a+g.openTot,0);const totQ=list.reduce((a,g)=>a+g.tot,0)-tot;
     return `<h3 class="sec-h ${rec?"in":"out"}">${rec?"A receber das parceiras líderes":"A pagar às parceiras"} <span class="num">${money(tot)}</span>${totQ>0.004?`<span class="meta">${tot?"em aberto · ":""}${money(totQ)} ${rec?"já recebido":"já pago"}</span>`:""}<small>${rec?"a parceira recebe da seguradora e paga a "+esc(emisCurto()):"a "+esc(emisCurto())+" recebe da seguradora e paga a parceira"}</small></h3>
@@ -647,13 +671,13 @@ function secaoDirecao(md,dir){
       const items=[...g.items].sort((a,b)=>String(a.data_emissao||"").localeCompare(String(b.data_emissao||"")));
       const flag=allPaid?(rec?"tudo recebido":"tudo pago"):"";
       return `<article class="group ${rec?"g-in":"g-out"}${allPaid?" quitado":""}">
-        <div class="g-head"><div><div class="g-name"${g.cnpj?` title="CNPJ ${esc(fmtCnpj(g.cnpj))}"`:""}>${esc(g.name)}</div>${S.det&&g.cnpj?`<div class="g-meta num">${esc(fmtCnpj(g.cnpj))}</div>`:""}${flag?`<div class="g-meta">${esc(flag)}</div>`:""}</div>
+        <div class="g-head"><div><div class="g-name"${g.cnpj?` title="CNPJ ${esc(fmtCnpj(g.cnpj))}"`:""}>${esc(String(g.name).toLocaleUpperCase("pt-BR"))}</div>${S.det&&g.cnpj?`<div class="g-meta num">${esc(fmtCnpj(g.cnpj))}</div>`:""}${flag?`<div class="g-meta">${esc(flag)}</div>`:""}</div>
           <div class="g-total num">${money(allPaid?g.tot:g.openTot)}</div></div>
         <div class="rows">${items.map(d=>{const st=status(d);const normal=st==="apagar"||st==="areceber";
           return `<div class="row lean" data-action="edit" data-id="${esc(d.id)}" tabindex="0">
             <div class="cell">
-              <div class="ap-info"><span class="lbl">Tomador</span><span class="tom">${esc(d.tomador||"—")}</span>${d.tomador_cnpj?`<span class="num tcnpj">${esc(fmtCnpj(d.tomador_cnpj))}</span>`:""}${segTag(d.seguradora)}${d.observacao?'<span class="obs-dot" title="Tem observação"></span>':""}</div>
-              <div class="ap ap-split" title="Apólice ${esc(d.apolice||"s/ nº")}">${splitBar(d)}${grupoTag(d)}${d.parcelas_total>1?`<span class="pc">${d.parcela_num}/${d.parcelas_total}</span>`:""}${missBadge(d)}</div>
+              <div class="ap-info"><span class="lbl">Tomador</span><span class="tom">${esc(d.tomador||"—")}</span>${d.tomador_cnpj?`<span class="num tcnpj">${esc(fmtCnpj(d.tomador_cnpj))}</span>`:""}${segTag(d.seguradora)}</div>
+              <div class="ap ap-split" title="Apólice ${esc(d.apolice||"s/ nº")}">${splitBar(d)}${grupoTag(d)}${d.parcelas_total>1?`<span class="pc">${d.parcela_num}/${d.parcelas_total}</span>`:""}</div>
               ${S.det?`<div class="sub det-l">Apólice <span class="num">${esc(d.apolice||"s/ nº")}</span> · Emissão ${esc(dateBR(d.data_emissao))}${d.modalidade?` · ${esc(d.modalidade)}`:""}${(d.anexos||[]).length?` · ${(d.anexos||[]).length} anexo${(d.anexos||[]).length>1?"s":""}`:""}</div>`:""}</div>
             <div class="val num">${g.items.length>1?money(d.valor_repasse):""}</div><div class="c-st">${normal?"":chip(st)}</div></div>`}).join("")}</div>
         ${conf?`<div class="confirm"><p>Registrar ${rec?"recebimento":"pagamento"} de <span class="num">${money(g.openTot)}</span> ${rec?"de":"a"} ${esc(g.name)} (${g.open.length} parcela${g.open.length>1?"s":""})?</p>
@@ -679,7 +703,7 @@ function renderTabela(c){
     ${rows.length?`<div class="tablebox"><table>
       <thead><tr><th>Emissão</th><th>Apólice</th><th>Tomador</th><th>Parceira</th><th>Seguradora</th><th class="r">Valor</th><th>Compet.</th><th>Status</th></tr></thead>
       <tbody>${rows.map(d=>`<tr data-action="edit" data-id="${esc(d.id)}" tabindex="0">
-        <td class="num">${esc(dateBR(d.data_emissao))}</td><td class="num">${esc(d.apolice||"—")}${grupoTag(d)}${clipBadge(d)}${d.observacao?'<span class="obs-dot" title="Tem observação"></span>':""}${d.numero_susep?`<div class="sub">SUSEP ${esc(d.numero_susep)}</div>`:""}${parcTxt(d)?`<div class="sub">${parcTxt(d)}</div>`:""}</td>
+        <td class="num">${esc(dateBR(d.data_emissao))}</td><td class="num">${esc(d.apolice||"—")}${grupoTag(d)}${clipBadge(d)}${d.numero_susep?`<div class="sub">SUSEP ${esc(d.numero_susep)}</div>`:""}${parcTxt(d)?`<div class="sub">${parcTxt(d)}</div>`:""}</td>
         <td>${esc(d.tomador||"—")}${d.tomador_cnpj?`<div class="sub num">${esc(fmtCnpj(d.tomador_cnpj))}</div>`:""}</td><td>${esc(d.corretor||"—")}<div class="sub">${d.lider==="parceira"?"líder":"co-corretora"}</div></td><td>${esc(d.seguradora||"—")}</td>
         <td class="r num"><span class="dir ${dirDe(d)==="receber"?"in":"out"}">${dirDe(d)==="receber"?"+":"−"}</span> ${money(d.valor_repasse)}</td><td class="num">${esc(monthShort(d.competencia))}</td><td>${chip(status(d))}</td></tr>`).join("")}</tbody>
       <tfoot><tr><td colspan="5">${rows.length} parcela${rows.length>1?"s":""} · ${new Set(rows.map(d=>d.id)).size} apólice${new Set(rows.map(d=>d.id)).size>1?"s":""}</td><td class="r num" colspan="3">− ${money(somaV(rows.filter(d=>dirDe(d)==="pagar")))} a pagar · + ${money(somaV(rows.filter(d=>dirDe(d)==="receber")))} a receber</td></tr></tfoot></table></div>`
@@ -1804,6 +1828,11 @@ document.addEventListener("click",ev=>{
     case "editPaySave":t.disabled=true;alterarDataBaixa(t.dataset.k);break;
     case "undoGroupPay":{const k=t.dataset.k;const ids=monthDocs().filter(d=>grupoKey(d)===k&&d.pago).map(d=>d.pid).filter(Boolean);t.disabled=true;desfazerBaixa(ids,k.startsWith("receber"));break}
     case "copy":copyExtrato(t.dataset.k);break;
+    case "kpi":{const g=t.dataset.go;if(g==="notif"){go("notificacoes");break}
+      if(g==="atraso"){const od=overdue().sort((a,b)=>String(a.vencimento||a.competencia).localeCompare(String(b.vencimento||b.competencia)));if(od.length){S.month=od[0].competencia;S.tab=dirDe(od[0])}else S.tab="pagar"}
+      else S.tab=g;S.q="";go("repasses");break}
+    case "rankMais":S.rankAll=!S.rankAll;render();break;
+    case "acoesMais":S.acoesMais=S.acoesMais===t.dataset.k?null:t.dataset.k;render();break;
     case "dem":openDem(monthDocs().filter(d=>grupoKey(d)===t.dataset.k),{titulo:"Parcelas com vencimento em "+monthName(S.month)});break;
     case "demRel":{const g=agruparRel(repDocs(),"corretora").find(x=>x.k===t.dataset.k);if(g)openDem(g.itens,{titulo:"Parcelas com vencimento em "+repPeriodoTxt()});break}
     case "demClose":demFechar(false);break;
