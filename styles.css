@@ -1,4 +1,4 @@
-/* Layout: faixa azul-marinho da marca (símbolo + título + mês) → 4 números do mês → abas → painel lateral. Cores e Poppins da identidade do Clube. */
+/* Layout: faixa azul-marinho da marca (símbolo + título + mês) → 4 números do mês → abas → painel lateral. Cores da identidade do Clube; fonte Manrope no texto e nos números. */
 :root{
   --navy:#022D5B; --navy-deep:#00214C; --gold:#B99269; --gold-soft:#C7A887; --brand-green:#086256;
   --bg:#F4F5F7; --surface:#FFFFFF; --sunk:#ECEFF3; --ink:#0D1E36; --muted:#5A6679; --line:#DCE1E8;
@@ -6,8 +6,8 @@
   --warn:#9A5B00; --warn-bg:#FBEFD8; --danger:#B0261E; --danger-bg:#FBE4E1;
   --wait:#3A5877; --wait-bg:#E3EBF3; --ok:#086256; --ok-bg:#DDEFEA;
   --shadow:0 18px 50px rgba(2,45,91,.22);
-  --f-ui:"Poppins",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --f-ui:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;  /* mesma fonte, algarismos alinhados em coluna */
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#07111E; --surface:#0E1B2D; --sunk:#132339; --ink:#E6ECF4; --muted:#93A1B5; --line:#1E2E45;
@@ -25,7 +25,7 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.45}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums}
 .wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:6px 40px}
 .num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
 button,input,select,textarea{font:inherit;color:inherit}
