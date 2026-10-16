@@ -481,31 +481,49 @@ function calLinha(d,titulo,confirmar){const rec=dirDe(d)==="receber";
   return `<div class="av-row${d.pago?" ok":""}"><div class="av-main"><b class="av-q">${esc(titulo)}</b><span class="av-v num ${rec?"in":"out"}">${money(d.valor_repasse)}</span>
     <div class="av-sub">Apólice <span class="num">${esc(d.apolice||"s/ nº")}</span>${grupoTag(d)}${d.parcelas_total>1?` · parcela ${d.parcela_num}/${d.parcelas_total}`:""}${d.vencimento?` · vencimento ${esc(dateBR(d.vencimento))}`:""} ${segTag(d.seguradora)} ${chip(status(d))}</div></div>
     <div class="av-act">${confirmar&&!d.pago?`<button class="btn small primary" data-action="confirmParc" data-pid="${esc(d.pid||"")}" data-rec="${rec?1:""}">${rec?"Sim, recebi":"Sim, paguei"}</button>`:""}<button class="btn small ghost" data-action="edit" data-id="${esc(d.id)}">Abrir</button></div></div>`}
+function juntarDia(l){const g=new Map();l.forEach(d=>{const k=corrKey(d)+"|"+dirDe(d);const x=g.get(k);if(x)x.push(d);else g.set(k,[d])});
+  return [...g.values()].sort((a,b)=>(a.every(x=>x.pago)-b.every(x=>x.pago))||(dirDe(a[0])==="receber")-(dirDe(b[0])==="receber"))}
 function renderCalendario(P){
   const [a,m]=S.month.split("-").map(Number);const ult=ultimoDia(a,m);const ini=new Date(a,m-1,1).getDay();const hoje=isoDay(new Date());
   const dia=d=>`${S.month}-${String(d).padStart(2,"0")}`;
   const venc={};S.docs.forEach(d=>{if(d.vencimento&&String(d.vencimento).startsWith(S.month)){const k=String(d.vencimento).slice(0,10);(venc[k]=venc[k]||[]).push(d)}});
   Object.values(venc).forEach(l=>l.sort((x,y)=>(x.pago-y.pago)||String(x.corretor).localeCompare(String(y.corretor))));
   if(!S.calDay||!S.calDay.startsWith(S.month))S.calDay=S.month===hoje.slice(0,7)?hoje:null;
-  const item=d=>{const rec=dirDe(d)==="receber";return `<span class="cv ${rec?"in":"out"}${d.pago?" ok":emAtraso(d)||(!d.pago&&String(d.vencimento).slice(0,10)<addDias(hoje,-5))?" late":""}" title="${esc((rec?"Receber de ":"Pagar a ")+(d.corretor||"")+" · "+money(d.valor_repasse)+" · apólice "+(d.apolice||""))}"><i>${d.pago?"✓":rec?"↙":"↗"}</i>${esc(parceiraCurta(d))}</span>`};
+  const estado=d=>d.pago?"ok":emAtraso(d)||String(d.vencimento).slice(0,10)<addDias(hoje,-5)?"late":"";
+  // a mesma corretora, no mesmo sentido e situação, vira uma etiqueta só: "VALIANZA ×3"
+  const juntar=l=>{const g=new Map();l.forEach(d=>{const k=corrKey(d)+"|"+dirDe(d)+"|"+estado(d);const x=g.get(k);if(x)x.push(d);else g.set(k,[d])});return [...g.values()]};
+  const item=l=>{const d=l[0];const rec=dirDe(d)==="receber";const st=estado(d);const tot=l.reduce((a,x)=>a+(Number(x.valor_repasse)||0),0);
+    return `<span class="cv ${rec?"in":"out"}${st?" "+st:""}" title="${esc((rec?"Receber de ":"Pagar a ")+(d.corretor||"")+" · "+money(tot)+(l.length>1?` · ${l.length} parcelas`:" · apólice "+(d.apolice||"")))}"><i>${d.pago?"✓":rec?"↙":"↗"}</i><em>${esc(nomeCurtoDem(d.corretor))}</em>${l.length>1?`<b>×${l.length}</b>`:""}</span>`};
   const cells=[];for(let i=0;i<ini;i++)cells.push(`<div class="cal-cell blank" aria-hidden="true"></div>`);
   for(let d=1;d<=ult;d++){const iso=dia(d);const v=venc[iso]||[];const ws=new Date(a,m-1,d).getDay();
     cells.push(`<button class="cal-cell${iso===hoje?" today":""}${S.calDay===iso?" sel":""}${ws===0||ws===6?" wknd":""}${v.length?" tem":""}" data-action="calDay" data-iso="${iso}" aria-label="${d}${v.length?`, ${v.length} parcela${v.length>1?"s":""} vence${v.length>1?"m":""}`:""}">
-      <span class="cal-n">${d}</span><span class="cal-ev">${v.slice(0,3).map(item).join("")}${v.length>3?`<span class="cv more">+${v.length-3}</span>`:""}</span></button>`)}
+      <span class="cal-n">${d}</span><span class="cal-ev">${(g=>g.slice(0,3).map(item).join("")+(g.length>3?`<span class="cv more">+${g.length-3}</span>`:""))(juntar(v))}</span></button>`)}
   const sel=S.calDay;let det="";
   if(sel){const v=venc[sel]||[];const d=+sel.slice(8);
     const dt=new Date(a,m-1,d).toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"});
-    det=`<section class="cardbox cal-det"><div class="cb-head"><h3>${esc(dt.charAt(0).toUpperCase()+dt.slice(1))}${sel===hoje?' <span class="tag">hoje</span>':""}</h3>${v.length?`<span class="meta">${v.length} parcela${v.length>1?"s":""} vence${v.length>1?"m":""}; a comissão cai no dia seguinte</span>`:""}</div>
-      ${v.length?v.map(x=>calLinha(x,`${dirDe(x)==="receber"?"Receber de":"Pagar a"} ${parceiraCurta(x)}`,false)).join(""):`<p class="meta">Nenhuma parcela vence neste dia.</p>`}</section>`}
+    const cai=diaUtil(addDias(sel,1));const somaDir=r=>v.filter(x=>!x.pago&&(dirDe(x)==="receber")===r).reduce((a,x)=>a+(Number(x.valor_repasse)||0),0);
+    const tP=somaDir(false),tR=somaDir(true);
+    // um cartão por corretora (e sentido), com as apólices dentro
+    const grupos=juntarDia(v);
+    det=`<section class="cardbox cal-det">
+      <div class="cd-head"><div><h3>${esc(dt.charAt(0).toUpperCase()+dt.slice(1))}${sel===hoje?' <span class="tag">hoje</span>':""}</h3>
+        ${v.length?`<p>${v.length} parcela${v.length>1?"s":""} vence${v.length>1?"m":""} · a comissão cai ${esc(diaCurto(cai).toLowerCase())}</p>`:""}</div></div>
+      ${v.length?`${tP||tR?`<div class="cd-tot">${tP?`<div class="out"><span>A pagar</span><b class="num">${money(tP)}</b></div>`:""}${tR?`<div class="in"><span>A receber</span><b class="num">${money(tR)}</b></div>`:""}</div>`:""}
+      ${grupos.map(l=>{const d0=l[0],rec=dirDe(d0)==="receber",aberto=l.filter(x=>!x.pago),tot=(aberto.length?aberto:l).reduce((a,x)=>a+(Number(x.valor_repasse)||0),0);
+        const st=l.every(x=>x.pago)?"ok":l.some(x=>!x.pago&&(emAtraso(x)||String(x.vencimento).slice(0,10)<addDias(hoje,-5)))?"late":"";
+        return `<article class="cd-g ${rec?"in":"out"}${st?" "+st:""}">
+          <header><i aria-hidden="true">${st==="ok"?"✓":rec?"↙":"↗"}</i><div><b>${esc(String(d0.corretor||"Sem corretora").toLocaleUpperCase("pt-BR"))}</b>
+            <small>${st==="ok"?(rec?"Recebido":"Pago"):(rec?"Receber":"Pagar")}${l.length>1?` · ${l.length} parcelas`:""}${st==="late"?' · <span class="late">atrasado</span>':""}</small></div><span class="num cd-v">${money(tot)}</span></header>
+          <ul>${l.map(x=>`<li data-action="edit" data-id="${esc(x.id)}" tabindex="0" title="Abrir a apólice"><div class="cd-ap"><span class="num">${esc(x.apolice||"s/ nº")}</span>${x.parcelas_total>1?`<em>${x.parcela_num}/${x.parcelas_total}</em>`:""}${x.pago?'<em class="ok">✓ quitada</em>':""}<div class="cd-seg">${segTag(x.seguradora)}</div></div><span class="num cd-pv">${money(x.valor_repasse)}</span></li>`).join("")}</ul></article>`}).join("")}`
+      :`<p class="meta cd-vazio">Nenhuma parcela vence neste dia.</p>`}</section>`}
   const ab=Object.values(venc).flat().filter(x=>!x.pago);const semV=S.docs.filter(x=>!x.pago&&!x.vencimento).length;
   const abP=ab.filter(x=>dirDe(x)==="pagar"),abR=ab.filter(x=>dirDe(x)==="receber");
   const atrP=abP.filter(x=>String(x.vencimento).slice(0,10)<addDias(hoje,-5)).length,atrR=abR.filter(x=>String(x.vencimento).slice(0,10)<addDias(hoje,-5)).length;
   const mesNome=monthName(S.month).split(" ")[0];
-  const mini=`<section class="cal-mini"><h3>${esc(mesNome)} <small>parcelas com vencimento no mês</small></h3><div class="cm-grid">
-    <div class="cm out"><label>Parcelas em aberto para pagar</label><b class="num">${abP.length}</b>${atrP?`<small class="late">${atrP} sem baixa há mais de 5 dias</small>`:""}</div>
-    <div class="cm in"><label>Parcelas em aberto para receber</label><b class="num">${abR.length}</b>${atrR?`<small class="late">${atrR} sem baixa há mais de 5 dias</small>`:""}</div>
-    <div class="cm in"><label>Para receber</label><b class="num">${money(somaV(abR))}</b></div>
-    <div class="cm out"><label>Para pagar</label><b class="num">${money(somaV(abP))}</b></div></div></section>`;
+  const qt=(n,a)=>`${n} parcela${n!==1?"s":""} em aberto${a?` · <span class="late">${a} atrasada${a!==1?"s":""}</span>`:""}`;
+  const mini=`<section class="cal-mini"><h3>${esc(mesNome)} <small>parcelas com vencimento no mês</small></h3><div class="cm-grid dois">
+    <div class="cm out"><label>A pagar</label><b class="num">${money(somaV(abP))}</b><small>${qt(abP.length,atrP)}</small></div>
+    <div class="cm in"><label>A receber</label><b class="num">${money(somaV(abR))}</b><small>${qt(abR.length,atrR)}</small></div></div></section>`;
   P.innerHTML=mini+`<div class="cal-top"><div class="cal-legend"><span class="cv out"><i>↗</i>A pagar à parceira</span><span class="cv in"><i>↙</i>A receber da parceira</span><span class="cv ok"><i>✓</i>Quitada</span><span class="cv out late"><i>↗</i>Venceu há mais de 5 dias, sem baixa</span></div>
     ${semV?`<span class="meta">${semV} parcela${semV>1?"s":""} em aberto sem vencimento informado</span>`:""}</div>
     <div class="cal-wrap"><div class="cal"><div class="cal-head">${["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(x=>`<span>${x}</span>`).join("")}</div><div class="cal-grid">${cells.join("")}</div></div>
@@ -1790,7 +1808,7 @@ document.addEventListener("click",ev=>{
     case "uDelOk":t.disabled=true;uAcao({acao:"excluir",email:t.dataset.email},"Conta excluída.");break;
     case "sideOpen":S.sideOpen=true;render();break;
     case "sideClose":S.sideOpen=false;render();break;
-    case "calDay":S.calDay=t.dataset.iso;render();break;
+    case "calDay":S.calDay=t.dataset.iso;render();if(window.matchMedia("(max-width:1100px)").matches){const det=document.querySelector(".cal-det");if(det)det.scrollIntoView({behavior:"smooth",block:"start"})}break;
     case "pendGo":{const od=overdue().sort((a,b)=>String(a.vencimento||a.competencia).localeCompare(String(b.vencimento||b.competencia)));S.q="";
       if(od.length){S.month=od[0].competencia;S.tab=dirDe(od[0])}go("repasses");break}
     case "closeLemb":openLembretes();break;
