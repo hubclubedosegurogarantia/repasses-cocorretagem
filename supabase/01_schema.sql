@@ -20,6 +20,47 @@ create table if not exists public.autorizados (
 );
 alter table public.autorizados add column if not exists admin boolean not null default false;
 
+-- Usuário para entrar sem digitar o e-mail: "Guilherme Távora" → Guilherme_Tavora (primeiro e último nome, sem acento)
+alter table public.autorizados add column if not exists usuario text;
+create or replace function public.gerar_usuario(p_nome text, p_email text)
+returns text language plpgsql as $$
+declare w text[]; base text; cand text; n int := 1;
+begin
+  w := regexp_split_to_array(trim(translate(coalesce(p_nome, ''),
+        'áàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ', 'aaaaaeeeeiiiiooooouuuucnAAAAAEEEEIIIIOOOOOUUUUCN')), '\s+');
+  base := initcap(w[1]) || case when array_length(w, 1) > 1 then '_' || initcap(w[array_length(w, 1)]) else '' end;
+  base := regexp_replace(base, '[^A-Za-z0-9_]', '', 'g');
+  if base = '' then base := split_part(p_email, '@', 1); end if;
+  cand := base;
+  while exists (select 1 from public.autorizados a where lower(a.usuario) = lower(cand) and lower(a.email) <> lower(p_email)) loop
+    n := n + 1; cand := base || n;
+  end loop;
+  return cand;
+end $$;
+create or replace function public.autorizados_usuario() returns trigger language plpgsql as $$
+begin
+  if tg_op = 'INSERT' and new.usuario is null then new.usuario := public.gerar_usuario(new.nome, new.email);
+  elsif tg_op = 'UPDATE' and new.nome is distinct from old.nome then new.usuario := public.gerar_usuario(new.nome, new.email);
+  end if;
+  return new;
+end $$;
+drop trigger if exists autorizados_usuario on public.autorizados;
+create trigger autorizados_usuario before insert or update of nome on public.autorizados
+  for each row execute function public.autorizados_usuario();
+do $$ declare r record; begin
+  for r in select email, nome from public.autorizados where usuario is null order by criado_em loop
+    update public.autorizados set usuario = public.gerar_usuario(r.nome, r.email) where email = r.email;
+  end loop;
+end $$;
+create unique index if not exists autorizados_usuario_unico on public.autorizados (lower(usuario));
+-- Na tela de login (antes de entrar): troca o usuário pelo e-mail. Só devolve o e-mail de quem é da equipe.
+create or replace function public.email_para_login(p text)
+returns text language sql stable security definer set search_path = public as $$
+  select a.email from public.autorizados a where lower(a.usuario) = lower(trim(p)) limit 1
+$$;
+revoke all on function public.email_para_login(text) from public;
+grant execute on function public.email_para_login(text) to anon, authenticated;
+
 insert into public.autorizados (email, nome, admin) values
   ('marcelo@SEU-DOMINIO.com.br',   'Marcelo Queiroz',  true),
   ('simone@SEU-DOMINIO.com.br',    'Simone Fraga',     true),

@@ -18,7 +18,14 @@ const CFG = window.CONFIG || {};
 const COMISSAO_PADRAO = Number(CFG.COMISSAO_PADRAO)||20;
 let EMIS = CFG.EMISSORA || {nome:"CS GARANTIA CORRETORA DE SEGUROS LTDA", cnpj:"57.610.106/0001-24", susep:"242162852"};
 const configured = CFG.SUPABASE_URL && !/SEU-PROJETO/.test(CFG.SUPABASE_URL) && CFG.SUPABASE_ANON_KEY && !/COLE-AQUI/.test(CFG.SUPABASE_ANON_KEY);
-const sb = configured && window.supabase ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+// Login: "Manter conectado" guarda a sessão no aparelho; sem isso ela some ao fechar o navegador ou o app
+const LEMBRAR="lembrar_login";
+const lembrarLogin=()=>{try{return localStorage.getItem(LEMBRAR)==="1"}catch(_){return false}};
+const authStore={
+  getItem:k=>{try{return (lembrarLogin()?localStorage:sessionStorage).getItem(k)}catch(_){return null}},
+  setItem:(k,v)=>{try{(lembrarLogin()?localStorage:sessionStorage).setItem(k,v)}catch(_){}},
+  removeItem:k=>{try{localStorage.removeItem(k)}catch(_){}try{sessionStorage.removeItem(k)}catch(_){}}};
+const sb = configured && window.supabase ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {auth:{storage:authStore}}) : null;
 
 const today = new Date();
 const ymNow = ym(today);
@@ -132,35 +139,47 @@ function brandCard(inner,foot){return `<div class="gate"><div class="card">
 
 function viewConfig(){root().innerHTML=brandCard(`<h2>Falta configurar o Supabase</h2><p>Preencha o arquivo <b>config.js</b> com a URL e a chave anon do projeto, como explica o README.</p>`)}
 
+// Telas de acesso (login, esqueci a senha, nova senha): azul à esquerda com o propósito do sistema, formulário à direita
+const IC_MAIL='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>';
+const IC_LOCK='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+function authShell(titulo,sub,inner){return `<div class="auth"><aside class="auth-side"><div class="auth-logo"><img src="${MARK}" alt=""><div><b>Clube</b><span>do Seguro Garantia</span></div></div>
+  <div class="auth-pitch"><div class="auth-eye">Repasses de cocorretagem</div><h1>Nenhuma comissão esquecida.</h1>
+    <p class="auth-lead">Controle do que pagar e receber das corretoras parceiras, com avisos automáticos por e-mail e no celular.</p>
+    <ul class="auth-list"><li><i>1</i><div>Cobranças 1 e 5 dias depois do vencimento<small>às 8h e às 19h, até haver baixa</small></div></li>
+      <li><i>2</i><div>Fim do mês sem pendências<small>aviso no penúltimo dia</small></div></li>
+      <li><i>3</i><div>Relatório mensal pronto<small>PDF e Excel no último dia</small></div></li></ul></div>
+  <div class="auth-foot">Especialistas em Seguro Garantia. Parceiros do corretor de seguros.</div></aside>
+  <main class="auth-main"><div class="auth-box"><h2>${titulo}</h2><p class="auth-sub">${sub}</p>${inner}</div></main></div>`}
+const campo=(id,label,ic,attrs,olho)=>`<div class="f"><label for="${id}">${label}</label><div class="inp">${ic}<input id="${id}" ${attrs}>${olho?`<button type="button" class="eye" data-action="olho" data-for="${id}">Mostrar</button>`:""}</div></div>`;
+const msgBox=(msg,kind)=>msg?`<div class="msg ${kind||"err"}" role="alert">${esc(msg)}</div>`:"";
+// aceita e-mail ou usuário (ex.: Guilherme_Tavora); devolve o e-mail ou null
+async function emailDoLogin(v){v=String(v||"").trim();if(!v)return null;if(v.includes("@"))return v.toLowerCase();
+  try{const {data,error}=await sb.rpc("email_para_login",{p:v});return error?null:(data||null)}catch(_){return null}}
 function viewLogin(msg,kind){
-  root().innerHTML=brandCard(`<h2>Repasses de Cocorretagem</h2><p>Acesso restrito à equipe do Clube.</p>
-    ${msg?`<div class="msg ${kind||"err"}" role="alert">${esc(msg)}</div>`:""}
-    <form id="loginForm" class="card-body" style="padding:0">
-      <div class="f"><label for="lgEmail">E-mail</label><input id="lgEmail" type="email" autocomplete="username" required></div>
-      <div class="f"><label for="lgPass">Senha</label><input id="lgPass" type="password" autocomplete="current-password" required></div>
-      <button class="btn primary" id="lgBtn" type="submit">Entrar</button>
-    </form>
-    <button class="linkbtn" data-action="forgot">Esqueci minha senha</button>`,
-    "Especialistas em Seguro Garantia. Parceiros do corretor de seguros.");
-  setTimeout(()=>$("lgEmail")&&$("lgEmail").focus(),30);
+  root().innerHTML=authShell("Entrar","Acesso restrito à equipe do Clube.",`${msgBox(msg,kind)}
+    <form id="loginForm">
+      ${campo("lgEmail","E-mail ou usuário",IC_MAIL,`type="text" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Ex.: Guilherme_Tavora" required value="${esc(lsGet("ultimo_email")||"")}"`)}
+      ${campo("lgPass","Senha",IC_LOCK,`type="password" autocomplete="current-password" required`,true)}
+      <div class="auth-row"><label class="check"><input type="checkbox" id="lgLembrar"${lembrarLogin()?" checked":""}> Manter conectado</label><button type="button" class="linkbtn" data-action="forgot">Esqueci a senha</button></div>
+      <button class="btn primary auth-btn" id="lgBtn" type="submit">Entrar →</button>
+    </form>`);
+  setTimeout(()=>{const e=$("lgEmail");if(e)(e.value?$("lgPass"):e).focus()},30);
 }
 function viewForgot(msg,kind){
-  root().innerHTML=brandCard(`<h2>Redefinir senha</h2><p>Enviaremos um link para o seu e-mail cadastrado.</p>
-    ${msg?`<div class="msg ${kind||"err"}" role="alert">${esc(msg)}</div>`:""}
-    <form id="forgotForm" class="card-body" style="padding:0">
-      <div class="f"><label for="fgEmail">E-mail</label><input id="fgEmail" type="email" autocomplete="username" required></div>
-      <button class="btn primary" type="submit">Enviar link</button>
+  root().innerHTML=authShell("Redefinir senha","Enviaremos um link para o seu e-mail cadastrado.",`${msgBox(msg,kind)}
+    <form id="forgotForm">
+      ${campo("fgEmail","E-mail ou usuário",IC_MAIL,`type="text" autocomplete="username" autocapitalize="off" spellcheck="false" required value="${esc(lsGet("ultimo_email")||"")}"`)}
+      <button class="btn primary auth-btn" type="submit">Enviar link</button>
     </form>
-    <button class="linkbtn" data-action="toLogin">Voltar para o login</button>`);
+    <button class="linkbtn auth-back" data-action="toLogin">← Voltar para o login</button>`);
 }
 function viewNewPass(msg){
-  root().innerHTML=brandCard(`<h2>Crie uma nova senha</h2><p>Use pelo menos 8 caracteres.</p>
-    ${msg?`<div class="msg err" role="alert">${esc(msg)}</div>`:""}
-    <form id="newPassForm" class="card-body" style="padding:0">
-      <div class="f"><label for="np1">Nova senha</label><input id="np1" type="password" autocomplete="new-password" minlength="8" required></div>
-      <div class="f"><label for="np2">Repita a senha</label><input id="np2" type="password" autocomplete="new-password" minlength="8" required></div>
-      <button class="btn primary" type="submit">Salvar senha</button>
-    </form>${S.me?`<button class="linkbtn" data-action="cancelPass">Cancelar</button>`:""}`);
+  root().innerHTML=authShell("Crie uma nova senha","Use pelo menos 8 caracteres.",`${msgBox(msg)}
+    <form id="newPassForm">
+      ${campo("np1","Nova senha",IC_LOCK,`type="password" autocomplete="new-password" minlength="8" required`,true)}
+      ${campo("np2","Repita a senha",IC_LOCK,`type="password" autocomplete="new-password" minlength="8" required`,true)}
+      <button class="btn primary auth-btn" type="submit">Salvar senha</button>
+    </form>${S.me?`<button class="linkbtn auth-back" data-action="cancelPass">Cancelar</button>`:""}`);
 }
 function viewDenied(email){
   root().innerHTML=brandCard(`<h2>Acesso não autorizado</h2><p>A conta <b>${esc(email)}</b> não está na lista de pessoas autorizadas. Fale com o Marcelo ou o Guilherme para liberar.</p>
@@ -177,7 +196,7 @@ async function onSession(session){
   S.nomes=Object.fromEntries((data||[]).map(r=>[r.email.toLowerCase(),r.nome]));
   if(!S.nomes[email]){S.view="denied";viewDenied(email);return}
   S.equipe=data||[];const eu=(data||[]).find(r=>r.email.toLowerCase()===email)||{};
-  S.me={email,nome:S.nomes[email],admin:!!eu.admin};
+  S.me={email,nome:S.nomes[email],admin:!!eu.admin,usuario:eu.usuario||""};
   await carregarEmissoras();
   if(S.view!=="app"){S.view="app";if(S.channel){sb.removeChannel(S.channel);S.channel=null}mountApp();await load();subscribe();initPush()}
 }
@@ -1829,7 +1848,7 @@ function renderConfig(P){
   const users=U.users||[];const f=U.form;const row=U.row||{};
   P.innerHTML=`<div class="notif">
     <section class="cardbox"><div class="cb-head"><h3>Minha conta</h3></div>
-      <div class="acct"><span class="avatar lg">${esc(iniciais(me.nome))}</span><div><b>${esc(me.nome)}</b><div class="meta">${esc(me.email)} · ${adm?"Administrador":"Usuário"}</div></div>
+      <div class="acct"><span class="avatar lg">${esc(iniciais(me.nome))}</span><div><b>${esc(me.nome)}</b><div class="meta">${esc(me.email)} · ${adm?"Administrador":"Usuário"}</div>${me.usuario?`<div class="meta">Para entrar, use o e-mail ou o usuário <b class="num">${esc(me.usuario)}</b></div>`:""}</div>
       <span class="spacer"></span><button class="btn" data-action="changePass">Trocar minha senha</button></div></section>
     <section class="cardbox"><div class="cb-head"><h3>Usuários com acesso</h3><span class="meta">${adm?"Como administrador, você inclui pessoas, redefine senhas e exclui contas.":"Só administradores alteram esta lista."}</span>
       ${adm&&!f?`<span class="spacer"></span><button class="btn primary" data-action="uNew">+ Novo usuário</button>`:""}</div>
@@ -1847,7 +1866,7 @@ function renderConfig(P){
         :U.criado?`<div class="msg ok created"><div><b>Acesso criado para ${esc(U.criado.email)}.</b>${U.criado.aviso?` ${esc(U.criado.aviso)}`:""} Envie a senha para a pessoa: <span class="num pwshow">${esc(U.criado.senha)}</span></div><button class="btn small" data-action="uCopy">Copiar</button><button class="iconbtn" data-action="uOk" aria-label="Fechar aviso">✕</button></div>`:""}
       ${U.loading?`<p class="loading">Carregando usuários…</p>`:`<div class="tablebox"><table class="ctable utable"><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Último acesso</th><th class="r"></th></tr></thead><tbody>
       ${users.map(u=>{const em=u.email.toLowerCase();const isMe=em===me.email;const open=row.email===em;
-        const line=`<tr${open?' class="editing"':""}><td>${esc(u.nome)}${isMe?' <span class="tag">você</span>':""}</td><td class="mail">${esc(u.email)}</td>
+        const line=`<tr${open?' class="editing"':""}><td>${esc(u.nome)}${isMe?' <span class="tag">você</span>':""}${u.usuario?`<div class="meta num" title="Usuário para entrar">${esc(u.usuario)}</div>`:""}</td><td class="mail">${esc(u.email)}</td>
           <td><span class="chip ${u.admin?"s-apagar":"s-aguardando"}">${u.admin?"Administrador":"Usuário"}</span></td>
           <td class="meta">${u.tem_login===false?"sem login criado":u.ultimo_acesso?esc(dtBR(u.ultimo_acesso)):u.tem_login===null?"—":"nunca entrou"}</td>
           <td class="r">${adm?`<button class="btn small ghost" data-action="uEditRow" data-email="${esc(em)}">Editar</button><button class="btn small ghost" data-action="uSenhaRow" data-email="${esc(em)}">Senha</button><button class="btn small ghost" data-action="${isMe&&u.admin?"uSelfDemote":"uAdminToggle"}" data-email="${esc(em)}" data-v="${u.admin?"0":"1"}">${u.admin?"Tirar admin":"Tornar admin"}</button>${isMe?"":`<button class="btn small ghost danger-txt" data-action="uDelRow" data-email="${esc(em)}">Excluir</button>`}`:""}</td></tr>`;
@@ -1927,10 +1946,16 @@ document.addEventListener("submit",async ev=>{
   const f=ev.target;ev.preventDefault();
   if(f.id==="loginForm"){
     const b=$("lgBtn");b.disabled=true;b.textContent="Entrando…";
-    const {error}=await sb.auth.signInWithPassword({email:$("lgEmail").value.trim(),password:$("lgPass").value});
-    if(error)viewLogin(/invalid/i.test(error.message)?"E-mail ou senha incorretos.":/confirm/i.test(error.message)?"Confirme seu e-mail pelo link que recebeu antes de entrar.":"Não foi possível entrar agora. Tente de novo.");
+    const digitado=$("lgEmail").value.trim(),lembrar=$("lgLembrar").checked;
+    const em=await emailDoLogin(digitado);
+    if(!em){viewLogin("Usuário ou senha incorretos.");return}
+    lsSet(LEMBRAR,lembrar?"1":"");lsSet("ultimo_email",digitado);
+    if(!lembrar)try{Object.keys(localStorage).filter(k=>/^sb-.*-auth-token/.test(k)).forEach(k=>localStorage.removeItem(k))}catch(_){}  // antes de entrar: define onde a sessão fica guardada
+    const {error}=await sb.auth.signInWithPassword({email:em,password:$("lgPass").value});
+    if(error)viewLogin(/invalid/i.test(error.message)?(digitado.includes("@")?"E-mail ou senha incorretos.":"Usuário ou senha incorretos."):/confirm/i.test(error.message)?"Confirme seu e-mail pelo link que recebeu antes de entrar.":"Não foi possível entrar agora. Tente de novo.");
   }else if(f.id==="forgotForm"){
-    const {error}=await sb.auth.resetPasswordForEmail($("fgEmail").value.trim(),{redirectTo:location.origin+location.pathname});
+    const fe=await emailDoLogin($("fgEmail").value.trim());
+    const {error}=fe?await sb.auth.resetPasswordForEmail(fe,{redirectTo:location.origin+location.pathname}):{error:null};
     viewForgot(error?"Não foi possível enviar agora. Tente em alguns minutos.":"Se o e-mail estiver cadastrado, o link chega em instantes. Confira também o spam.",error?"err":"ok");
   }else if(f.id==="newPassForm"){
     const p1=$("np1").value,p2=$("np2").value;
@@ -1986,6 +2011,7 @@ document.addEventListener("click",ev=>{
     case "toConfig":S.menuOpen=false;go("configuracoes");break;
     case "dDel":destDel(t.dataset.email);break;
     case "dTipo":destTipo(t);break;
+    case "olho":{const inp=$(t.dataset.for);if(inp){const v=inp.type==="password";inp.type=v?"text":"password";t.textContent=v?"Ocultar":"Mostrar";inp.focus()}break}
     case "mcEdit":S.mcEdit=!S.mcEdit;renderDevice();break;
     case "mcEquipe":ev.preventDefault();{const b=$("destBox");if(b)b.scrollIntoView({behavior:"smooth",block:"start"})}break;
     case "mcIncluir":mcIncluir();break;

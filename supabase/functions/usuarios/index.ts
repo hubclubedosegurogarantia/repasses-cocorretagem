@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
 
     if (acao === "listar") {
       const [{ data: lista }, auth] = await Promise.all([
-        admin.from("autorizados").select("email, nome, admin, criado_em").order("nome"),
+        admin.from("autorizados").select("email, nome, admin, criado_em, usuario").order("nome"),
         todosUsuariosAuth().catch(() => []),
       ]);
       const porEmail = new Map(auth.map((u) => [u.email?.toLowerCase(), u]));
