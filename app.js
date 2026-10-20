@@ -638,8 +638,18 @@ function renderDevice(){
   const box=$("devBox");if(!box)return;const p=S.push;const ok=CFG.VAPID_PUBLIC_KEY&&p.supported;
   const est=!CFG.VAPID_PUBLIC_KEY?["Push ainda não configurado","Peça ao administrador para concluir a publicação."]:!p.supported?(isIOS()&&!isStandalone()?["Instale o app para receber avisos","No iPhone: Safari → Compartilhar → Adicionar à Tela de Início, e abra o app pelo ícone."]:["Este navegador não aceita notificações","Use o Chrome, o Edge ou o app instalado no celular."]):p.on?["Avisos ativados neste aparelho","Você recebe no celular ou no computador os avisos de pagar e cobrar."]:["Avisos desligados neste aparelho","Ative para receber os avisos de pagar e cobrar no celular ou no computador."];
   box.innerHTML=`<div class="dev-in"><i class="dev-ic ${p.on&&ok?"on":"off"}" aria-hidden="true">${p.on&&ok?"✓":"!"}</i><div class="dev-tx"><b>${esc(est[0])}</b><span>${esc(est[1])}</span><small>E-mail: ${esc(S.me.email)}</small></div>
-    <div class="dev-bt">${ok?(p.on?`<button type="button" class="btn small ghost" data-action="pushOff">Desativar</button>`:`<button type="button" class="btn primary" data-action="pushOn">${p.busy?"Ativando…":"Ativar avisos"}</button>`):""}<button type="button" class="btn small" data-action="lembTeste" id="lTesteBtn">Enviar teste agora</button></div></div>`;
+    <div class="dev-bt">${ok?(p.on?`<button type="button" class="btn small ghost" data-action="pushOff">Desativar</button>`:`<button type="button" class="btn primary" data-action="pushOn">${p.busy?"Ativando…":"Ativar avisos"}</button>`):""}<button type="button" class="btn small" data-action="lembTeste" id="lTesteBtn">Enviar teste agora</button></div></div>
+    ${minhaConta()}`;
 }
+function minhaConta(){
+  if(S.dest==null)return "";const eu=String(S.me.email||"").toLowerCase();const x=S.dest.find(d=>d.email.toLowerCase()===eu);
+  if(!x)return `<div class="mc"><div class="mc-h"><b>Avisos desta conta</b><button type="button" class="btn small" data-action="mcIncluir">Quero receber</button></div><p class="meta" style="margin:0">Você não está na lista de quem recebe os avisos.</p></div>`;
+  const st=t=>{const e=tiposDe(x,"email").includes(t),c=tiposDe(x,"push").includes(t);return e&&c?["E-mail e celular","on"]:e?["Só e-mail","part"]:c?["Só celular","part"]:["Desligado","off"]};
+  return `<div class="mc"><div class="mc-h"><b>Avisos ativados nesta conta</b><button type="button" class="btn small${S.mcEdit?" primary":""}" data-action="mcEdit">${S.mcEdit?"Pronto":"Editar"}</button></div>
+    ${S.mcEdit?`<div class="mc-ed">${TIPOS_AV.map(([t,l,q])=>`<div class="drow"><div><span>${l}</span><small>${q}</small></div><div class="dps">${pill(x,"email",t,true)}${pill(x,"push",t,true)}</div></div>`).join("")}<p class="meta" style="margin:6px 0 0">Toque para ligar ou desligar. Salva na hora. A lista de toda a equipe fica em <a href="#" data-action="mcEquipe">Quem recebe os avisos</a>.</p></div>`
+    :`<ul class="mc-l">${TIPOS_AV.map(([t,l,q])=>{const [txt,c]=st(t);return `<li><div><span>${l}</span><small>${q}</small></div><em class="${c}">${txt}</em></li>`}).join("")}</ul>`}</div>`}
+async function mcIncluir(){const em=String(S.me.email||"").toLowerCase();const {error}=await sb.from("destinatarios").insert({emissora_id:S.emisId,email:em,nome:S.me.nome||null,fechamento:true,atraso:true});
+  if(error){toast(errMsg(error));return}S.dest.push({email:em,nome:S.me.nome||null,fechamento:true,atraso:true});S.mcEdit=true;renderDest();renderDevice();toast("Você foi incluído nos avisos.")}
 function cfgResumo(){const el=$("cfgResumo");if(!el)return;const c=avisosCfg();const L=S.lemb&&S.lemb.cfg||S.cfgL||{};const H=horasL(L);
   el.textContent=[`${c.on?"Cobranças "+c.dias.join(" e ")+" dias depois do vencimento":"Cobranças desligadas"}, às ${H.map(hh).join(" e ")}`,
     L.pendencias_fim_mes!==false?"penúltimo dia: faltou alguma pendência?":"",L.relatorio_fim_mes!==false?`último dia ${hh(L.hora_relatorio??19)}: relatório`:"",
@@ -1672,7 +1682,7 @@ async function openLembretes(){
   S.lemb={cfg:{dias:[...(cfg.dias||[])],hora:cfg.hora,horas:horasL(cfg),antecipar_fds:cfg.antecipar_fds,atraso_dia_semana:null,avisar_nova_push:cfg.avisar_nova_push,
     pendencias_fim_mes:cfg.pendencias_fim_mes!==false,relatorio_fim_mes:cfg.relatorio_fim_mes!==false,hora_relatorio:cfg.hora_relatorio??19},
     quem:cfg.atualizado_por,quando:cfg.atualizado_em,saving:false,dirty:false};
-  renderLembretes();renderDest();
+  renderLembretes();renderDest();renderDevice();
 }
 function renderLembretes(){
   const L=S.lemb;const box=$("lembBox");if(!L||!box)return;const c=L.cfg;const p=S.push;
@@ -1725,12 +1735,12 @@ async function lembTeste(){
 const TIPOS_AV=[["cobrancas","Cobranças das parcelas","1 e 5 dias depois do vencimento"],["pendencias","Faltou alguma pendência?","penúltimo dia do mês"],["relatorio","Relatório mensal","último dia do mês"]];
 const TODOS_AV=TIPOS_AV.map(t=>t[0]);
 function tiposDe(x,canal){const v=x[canal+"_tipos"];return Array.isArray(v)?v:(canal==="email"?(x.fechamento===false?[]:TODOS_AV):(x.push===false?[]:TODOS_AV))}
+function pill(x,canal,t,ok){const on=tiposDe(x,canal).includes(t);return ok?`<button type="button" class="dpill${on?" on":""}" data-action="dTipo" data-email="${esc(x.email)}" data-canal="${canal}" data-t="${t}" aria-pressed="${on}">${canal==="email"?"E-mail":"Celular"}</button>`:`<span class="dpill off" title="Só quem tem acesso ao app instala no celular">Celular</span>`}
 function renderDest(){
   const box=$("destBox");if(!box)return;
   if(S.dest==null){box.innerHTML=`<div class="cb-head"><h3>Quem recebe os avisos</h3></div><p class="meta">A lista aparece depois que o SQL atualizado for rodado (passo 2).</p>`;return}
   const equipe=new Set((S.equipe||[]).map(x=>x.email.toLowerCase()));const eu=String(S.me.email||"").toLowerCase();
   const d=[...S.dest].sort((a,b)=>(b.email.toLowerCase()===eu)-(a.email.toLowerCase()===eu)||String(a.nome||a.email).localeCompare(String(b.nome||b.email)));
-  const pill=(x,canal,t,ok)=>{const on=tiposDe(x,canal).includes(t);return ok?`<button type="button" class="dpill${on?" on":""}" data-action="dTipo" data-email="${esc(x.email)}" data-canal="${canal}" data-t="${t}" aria-pressed="${on}">${canal==="email"?"E-mail":"Celular"}</button>`:`<span class="dpill off" title="Só quem tem acesso ao app instala no celular">Celular</span>`};
   box.innerHTML=`<div class="cb-head"><h3>Quem recebe os avisos</h3><span class="meta">Escolha, para cada pessoa, o que ela recebe por e-mail e no celular · pode incluir e-mails de fora da equipe, como o financeiro</span></div>
     <div class="dgrid">${d.map(x=>{const eq=equipe.has(x.email.toLowerCase());const me=x.email.toLowerCase()===eu;const nada=!tiposDe(x,"email").length&&!tiposDe(x,"push").length;
       return `<article class="dcard${me?" me":""}"><header><div><b>${esc(x.nome||x.email.split("@")[0])}</b>${me?' <span class="tag">você</span>':eq?' <span class="tag">equipe</span>':""}<small>${esc(x.email)}</small></div>
@@ -1745,7 +1755,7 @@ async function destTipo(el){
   const patch={[canal+"_tipos"]:novo,[canal==="email"?"fechamento":"push"]:novo.length>0};if(canal==="email")patch.atraso=novo.length>0;
   el.disabled=true;const {error}=await painelEq(sb.from("destinatarios").update(patch)).eq("email",x.email);
   if(error){el.disabled=false;toast(errMsg(error));return}
-  Object.assign(x,patch);renderDest();
+  Object.assign(x,patch);renderDest();renderDevice();
 }
 async function destAdd(){
   const email=$("dEmail").value.trim().toLowerCase();const nome=$("dNome").value.trim()||null;
@@ -1976,6 +1986,9 @@ document.addEventListener("click",ev=>{
     case "toConfig":S.menuOpen=false;go("configuracoes");break;
     case "dDel":destDel(t.dataset.email);break;
     case "dTipo":destTipo(t);break;
+    case "mcEdit":S.mcEdit=!S.mcEdit;renderDevice();break;
+    case "mcEquipe":ev.preventDefault();{const b=$("destBox");if(b)b.scrollIntoView({behavior:"smooth",block:"start"})}break;
+    case "mcIncluir":mcIncluir();break;
     case "uNew":S.cfgU.form={senha:senhaAleatoria(),show:true,recebe:true};S.cfgU.criado=null;renderConfig($("page"));$("uNome").focus();break;
     case "uCancel":S.cfgU.form=null;renderConfig($("page"));break;
     case "uShow":readUForm();S.cfgU.form.show=!S.cfgU.form.show;renderConfig($("page"));break;

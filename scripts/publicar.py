@@ -12,7 +12,7 @@ reaproveitadas nas próximas publicações.
 
 Teste local, sem chamar APIs: SQL_LOCAL="host=... dbname=..." python3 scripts/publicar.py supabase
 """
-import json, os, pathlib, re, secrets, shutil, subprocess, sys, urllib.error, urllib.request
+import json, os, pathlib, re, secrets, shutil, subprocess, sys, time, urllib.error, urllib.request
 
 R = pathlib.Path(__file__).resolve().parent.parent
 def env(k, d=""): return (os.environ.get(k) or d).strip()
@@ -282,6 +282,12 @@ def montar_site(url, anon, vapid):
         c, n = re.subn(rf'({k}:\s*)"[^"]*"', lambda m: m.group(1) + json.dumps(v), c, count=1)
         if n != 1: falha(f"config.js: não achei {k}.")
     (d / "config.js").write_text(c, encoding="utf-8")
+    # versão em cada publicação: o navegador busca o app novo em vez de usar o guardado
+    v = (os.environ.get("GITHUB_SHA") or str(int(time.time())))[:10]
+    h = (d / "index.html").read_text(encoding="utf-8")
+    for f in ("styles.css", "app.js", "config.js"):
+        h = h.replace(f'"{f}"', f'"{f}?v={v}"')
+    (d / "index.html").write_text(h, encoding="utf-8")
     (d / ".nojekyll").write_text("")
     info("Site montado em _site.")
 
