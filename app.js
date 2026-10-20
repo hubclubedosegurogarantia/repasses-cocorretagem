@@ -174,12 +174,13 @@ function viewForgot(msg,kind){
     <button class="linkbtn auth-back" data-action="toLogin">← Voltar para o login</button>`);
 }
 function viewNewPass(msg){
-  root().innerHTML=authShell("Crie uma nova senha","Use pelo menos 8 caracteres.",`${msgBox(msg)}
+  const temp=!!S.trocaTemp;
+  root().innerHTML=authShell(temp?"Crie a sua senha":"Crie uma nova senha",temp?"Você entrou com a senha temporária do convite. Recomendamos criar agora a sua senha pessoal, com pelo menos 8 caracteres.":"Use pelo menos 8 caracteres.",`${msgBox(msg)}
     <form id="newPassForm">
       ${campo("np1","Nova senha",IC_LOCK,`type="password" autocomplete="new-password" minlength="8" required`,true)}
       ${campo("np2","Repita a senha",IC_LOCK,`type="password" autocomplete="new-password" minlength="8" required`,true)}
       <button class="btn primary auth-btn" type="submit">Salvar senha</button>
-    </form>${S.me?`<button class="linkbtn auth-back" data-action="cancelPass">Cancelar</button>`:""}`);
+    </form>${temp?`<button class="linkbtn auth-back" data-action="pularTroca">Agora não, trocar depois</button>`:S.me?`<button class="linkbtn auth-back" data-action="cancelPass">Cancelar</button>`:""}`);
 }
 function viewDenied(email){
   root().innerHTML=brandCard(`<h2>Acesso não autorizado</h2><p>A conta <b>${esc(email)}</b> não está na lista de pessoas autorizadas. Fale com o Marcelo ou o Guilherme para liberar.</p>
@@ -197,6 +198,7 @@ async function onSession(session){
   if(!S.nomes[email]){S.view="denied";viewDenied(email);return}
   S.equipe=data||[];const eu=(data||[]).find(r=>r.email.toLowerCase()===email)||{};
   S.me={email,nome:S.nomes[email],admin:!!eu.admin,usuario:eu.usuario||""};
+  if(session.user.user_metadata&&session.user.user_metadata.senha_temporaria&&!S.pularTroca&&S.view!=="app"){S.view="newpass";S.trocaTemp=true;viewNewPass();return}
   await carregarEmissoras();
   if(S.view!=="app"){S.view="app";if(S.channel){sb.removeChannel(S.channel);S.channel=null}mountApp();await load();subscribe();initPush()}
 }
@@ -1856,14 +1858,16 @@ function renderConfig(P){
       ${f?`<form id="uForm" class="uform">
         <div class="f"><label for="uNome">Nome</label><input id="uNome" value="${esc(f.nome||"")}" required></div>
         <div class="f"><label for="uEmail">E-mail</label><input id="uEmail" type="email" value="${esc(f.email||"")}" required></div>
-        <div class="f full umodo" role="radiogroup" aria-label="Como a pessoa entra"><label class="check"><input type="radio" name="uModo" value="convite"${f.modo!=="senha"?" checked":""}> Enviar convite por e-mail: a pessoa recebe o link e cria a própria senha</label><label class="check"><input type="radio" name="uModo" value="senha"${f.modo==="senha"?" checked":""}> Definir uma senha inicial e enviar eu mesmo</label></div>
-        ${f.modo==="senha"?`<div class="f full"><label for="uSenha">Senha inicial</label><div class="pw"><input id="uSenha" class="num" type="${f.show?"text":"password"}" value="${esc(f.senha||"")}" minlength="8" required autocomplete="new-password"><button type="button" class="btn small" data-action="uShow">${f.show?"Ocultar":"Mostrar"}</button><button type="button" class="btn small" data-action="uGen">Gerar senha</button></div><span class="hint">Pelo menos 8 caracteres. A pessoa pode trocar depois, em Configurações.</span></div>`:""}
+        <div class="f full"><label for="uSenha">Senha temporária</label><div class="pw"><input id="uSenha" class="num" type="text" value="${esc(f.senha||"")}" minlength="8" required autocomplete="off" spellcheck="false"><button type="button" class="btn small" data-action="uGen">Gerar outra</button></div>
+          <span class="hint">Usuário de acesso: <b class="num" id="uUserPrev">${esc(usuarioDe(f.nome)||"—")}</b> (sai do nome). A pessoa troca a senha no primeiro acesso.</span></div>
+        <label class="check"><input type="checkbox" id="uBoas"${f.boas!==false?" checked":""}> Enviar e-mail de boas-vindas com o usuário, a senha temporária e o passo a passo</label>
         <label class="check"><input type="checkbox" id="uAdmin"${f.admin?" checked":""}> Administrador (pode incluir e excluir pessoas e redefinir senhas)</label>
         <label class="check"><input type="checkbox" id="uRecebe"${f.recebe!==false?" checked":""}> Receber os avisos de pagar e receber (e-mail e celular)</label>
-        <div class="uform-foot"><span class="spacer"></span><button type="button" class="btn" data-action="uCancel">Cancelar</button><button type="submit" class="btn primary" id="uGo">Criar acesso</button></div>
+        <div class="uform-foot"><span class="spacer"></span><button type="button" class="btn" data-action="uCancel">Cancelar</button><button type="submit" class="btn primary" id="uGo">${f.boas!==false?"Criar e enviar convite":"Criar acesso"}</button></div>
       </form>`:""}
-      ${U.criado&&U.criado.convite?`<div class="msg ok created"><div><b>Convite enviado para ${esc(U.criado.email)}.</b> A pessoa recebe o e-mail com o link para criar a senha (vale 24 horas). Se não chegar, use <b>Senha → Enviar link</b> na linha dela.</div><button class="iconbtn" data-action="uOk" aria-label="Fechar aviso">✕</button></div>`
-        :U.criado?`<div class="msg ok created"><div><b>Acesso criado para ${esc(U.criado.email)}.</b>${U.criado.aviso?` ${esc(U.criado.aviso)}`:""} Envie a senha para a pessoa: <span class="num pwshow">${esc(U.criado.senha)}</span></div><button class="btn small" data-action="uCopy">Copiar</button><button class="iconbtn" data-action="uOk" aria-label="Fechar aviso">✕</button></div>`:""}
+      ${U.criado?`<div class="msg ok created"><div>${U.criado.enviado?`<b>Convite enviado para ${esc(U.criado.email)}.</b> A pessoa recebeu o e-mail de boas-vindas com o usuário <b class="num">${esc(U.criado.usuario)}</b> e a senha temporária.`
+          :`<b>Acesso criado para ${esc(U.criado.email)}.</b>${U.criado.aviso?` O e-mail não foi enviado: ${esc(U.criado.aviso)}`:""} Envie para a pessoa: usuário <b class="num">${esc(U.criado.usuario)}</b> · senha temporária <span class="num pwshow">${esc(U.criado.senha)}</span>`}</div>
+        ${U.criado.enviado?"":`<button class="btn small" data-action="uCopy">Copiar</button>`}<button class="iconbtn" data-action="uOk" aria-label="Fechar aviso">✕</button></div>`:""}
       ${U.loading?`<p class="loading">Carregando usuários…</p>`:`<div class="tablebox"><table class="ctable utable"><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Último acesso</th><th class="r"></th></tr></thead><tbody>
       ${users.map(u=>{const em=u.email.toLowerCase();const isMe=em===me.email;const open=row.email===em;
         const line=`<tr${open?' class="editing"':""}><td>${esc(u.nome)}${isMe?' <span class="tag">você</span>':""}${u.usuario?`<div class="meta num" title="Usuário para entrar">${esc(u.usuario)}</div>`:""}</td><td class="mail">${esc(u.email)}</td>
@@ -1889,17 +1893,20 @@ function renderConfig(P){
     <section class="cardbox" id="paineis">${painelSection()}</section>
   </div>`;
 }
-function readUForm(){const f=S.cfgU.form;if(!f||!$("uNome"))return f;f.nome=$("uNome").value;f.email=$("uEmail").value;const m=document.querySelector("input[name=uModo]:checked");if(m)f.modo=m.value;if($("uSenha"))f.senha=$("uSenha").value;f.admin=$("uAdmin").checked;f.recebe=$("uRecebe").checked;return f}
+function readUForm(){const f=S.cfgU.form;if(!f||!$("uNome"))return f;f.nome=$("uNome").value;f.email=$("uEmail").value;if($("uSenha"))f.senha=$("uSenha").value;f.boas=$("uBoas").checked;f.admin=$("uAdmin").checked;f.recebe=$("uRecebe").checked;return f}
+// mesma regra do banco (gerar_usuario): primeiro e último nome, sem acento → Guilherme_Tavora
+function usuarioDe(nome){const w=String(nome||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().split(/\s+/).filter(Boolean);if(!w.length)return "";
+  const cap=x=>x.charAt(0).toUpperCase()+x.slice(1).toLowerCase();return (cap(w[0])+(w.length>1?"_"+cap(w[w.length-1]):"")).replace(/[^A-Za-z0-9_]/g,"")}
 async function uCriar(){
   const f=readUForm();const b=$("uGo");
   if(!f.nome.trim()||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())){toast("Preencha nome e um e-mail válido.");return}
-  const conv=f.modo!=="senha";
-  if(!conv&&(f.senha||"").length<8){toast("A senha precisa ter pelo menos 8 caracteres.");return}
-  b.disabled=true;b.textContent=conv?"Enviando convite…":"Criando…";
-  try{const r=await chamarUsuarios({acao:"criar",nome:f.nome.trim(),email:f.email.trim().toLowerCase(),convite:conv,senha:conv?undefined:f.senha,admin:!!f.admin,recebe_email:f.recebe!==false});
-    if(conv&&r&&r.convite===false){toast(r.aviso||"O convite não pôde ser enviado.");S.cfgU.form=null;S.cfgU.row={email:f.email.trim().toLowerCase(),mode:"senha",senha:senhaAleatoria()};await refreshEquipe();loadUsuarios();return}
-    S.cfgU.criado=conv?{email:f.email.trim().toLowerCase(),convite:true}:{email:f.email.trim().toLowerCase(),senha:f.senha};S.cfgU.form=null;toast("Acesso criado.");await refreshEquipe();loadUsuarios()}
-  catch(e){b.disabled=false;b.textContent="Criar acesso";toast(e.message)}
+  if((f.senha||"").length<8){toast("A senha precisa ter pelo menos 8 caracteres.");return}
+  const em=f.email.trim().toLowerCase();const boas=f.boas!==false;
+  b.disabled=true;b.textContent=boas?"Enviando convite…":"Criando…";
+  try{const r=await chamarUsuarios({acao:"criar",nome:f.nome.trim(),email:em,senha:f.senha,boas_vindas:boas,app_url:location.origin+location.pathname,admin:!!f.admin,recebe_email:f.recebe!==false})||{};
+    S.cfgU.criado={email:em,usuario:r.usuario||usuarioDe(f.nome),senha:f.senha,enviado:!!r.enviado,aviso:r.aviso||""};S.cfgU.form=null;
+    toast(r.enviado?"Acesso criado e e-mail de boas-vindas enviado.":"Acesso criado.");await refreshEquipe();loadUsuarios()}
+  catch(e){b.disabled=false;b.textContent=boas?"Criar e enviar convite":"Criar acesso";toast(e.message)}
 }
 async function refreshEquipe(){const {data}=await sb.from("autorizados").select("*");if(data){S.equipe=data;S.nomes=Object.fromEntries(data.map(r=>[r.email.toLowerCase(),r.nome]))}}
 async function uAcao(body,okMsg){try{await chamarUsuarios(body);toast(okMsg);S.cfgU.row=null;await refreshEquipe();
@@ -1961,9 +1968,9 @@ document.addEventListener("submit",async ev=>{
     const p1=$("np1").value,p2=$("np2").value;
     if(p1.length<8)return viewNewPass("A senha precisa ter pelo menos 8 caracteres.");
     if(p1!==p2)return viewNewPass("As duas senhas não são iguais.");
-    const {error}=await sb.auth.updateUser({password:p1});
+    const {error}=await sb.auth.updateUser({password:p1,data:{senha_temporaria:false}});
     if(error)return viewNewPass("Não foi possível salvar a senha. Peça um novo link.");
-    S.view="boot";toast("Senha atualizada.");const {data}=await sb.auth.getSession();onSession(data.session);
+    S.view="boot";S.trocaTemp=false;toast("Senha atualizada.");const {data}=await sb.auth.getSession();onSession(data.session);
   }else if(f.id==="pform"){save()}
   else if(f.id==="destForm"){destAdd()}
   else if(f.id==="uForm"){uCriar()}
@@ -1980,6 +1987,7 @@ document.addEventListener("click",ev=>{
     case "toLogin":viewLogin();break;
     case "logout":S.menuOpen=false;sb.auth.signOut();break;
     case "cancelPass":S.view="boot";onSession(S.session);break;
+    case "pularTroca":S.pularTroca=true;S.trocaTemp=false;S.view="boot";onSession(S.session);break;
     case "sNew":S.sEdit={novo:true};renderSeguradoras($("content"));break;
     case "sEdit":S.sEdit={k:t.dataset.k};renderSeguradoras($("content"));break;
     case "sCor":{if(!S.sEdit)break;S.sEdit.cor=+t.dataset.i;document.querySelectorAll(".cor-sw").forEach(b=>{const on=+b.dataset.i===S.sEdit.cor;b.classList.toggle("on",on);b.setAttribute("aria-checked",on)});break}
@@ -2019,7 +2027,7 @@ document.addEventListener("click",ev=>{
     case "uCancel":S.cfgU.form=null;renderConfig($("page"));break;
     case "uShow":readUForm();S.cfgU.form.show=!S.cfgU.form.show;renderConfig($("page"));break;
     case "uGen":readUForm();S.cfgU.form.senha=senhaAleatoria();S.cfgU.form.show=true;renderConfig($("page"));break;
-    case "uCopy":navigator.clipboard.writeText(S.cfgU.criado.senha).then(()=>toast("Senha copiada."),()=>toast("Selecione a senha e copie."));break;
+    case "uCopy":navigator.clipboard.writeText(`Acesso ao Hub de Repasses · Clube do Seguro Garantia\n${location.origin+location.pathname}\nUsuário: ${S.cfgU.criado.usuario} (ou ${S.cfgU.criado.email})\nSenha temporária: ${S.cfgU.criado.senha}\nTroque a senha no primeiro acesso.`).then(()=>toast("Dados de acesso copiados."),()=>toast("Selecione a senha e copie."));break;
     case "uOk":S.cfgU.criado=null;renderConfig($("page"));break;
     case "uSenhaRow":S.cfgU.row={email:t.dataset.email,mode:"senha",senha:senhaAleatoria()};renderConfig($("page"));break;
     case "uSelfDemote":S.cfgU.row={email:t.dataset.email,mode:"autoadmin"};renderConfig($("page"));break;
@@ -2141,6 +2149,7 @@ function cnpjHint(){const h=$("cnpjHint");if(!h)return;const v=$("corretor_cnpj"
   const c=corretoraPorCnpj(cn);h.style.color="var(--muted)";
   h.textContent=c?(key(c.nome)===key($("corretor").value)?"Corretora da lista.":`Na lista como "${c.nome}".`):"Nova: será incluída na lista ao salvar."}
 document.addEventListener("input",ev=>{
+  if(ev.target.id==="uNome"&&$("uUserPrev")){$("uUserPrev").textContent=usuarioDe(ev.target.value)||"—"}
   const id=ev.target.id;
   if(id==="fq"){S.q=ev.target.value;
     if(S.q.trim()&&S.tab!=="apolices"){S.tabAntes=S.tab;S.tab="apolices";S.fScope="todas";renderRepTabs()}
