@@ -99,6 +99,9 @@ def supabase():
     if n != 1: falha("Não achei o bloco da equipe no 01_schema.sql.")
     sql(s)
 
+    # 1b) corretoras da planilha (supabase/dados/corretoras.csv: corretora;cnpj;susep)
+    importar_corretoras(sql)
+
     # 2) chaves geradas uma vez e guardadas no banco
     info("2/7 · Chaves do push e do agendamento")
     sql("""create table if not exists public.config_publicacao (
@@ -199,6 +202,50 @@ on conflict (id) do update set vapid_publica = excluded.vapid_publica, vapid_pri
     # o site é montado aqui mesmo: o GitHub não deixa passar a chave anon (um JWT) para outra etapa
     if not LOCAL: montar_site(url, anon, vpub)
     info(f"Pronto. App: {app_url}")
+
+def importar_corretoras(sql):
+    """Atualiza a lista de corretoras com a planilha do repositório. Pelo CNPJ, depois pelo SUSEP, depois pelo nome:
+    atualiza quem já existe e inclui as novas. Nada é apagado; corretoras incluídas pelo app continuam."""
+    arq = R / "supabase/dados/corretoras.csv"
+    if not arq.exists(): return
+    import csv
+    vistos_c, vistos_s, linhas_ok = set(), set(), []
+    with open(arq, encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f, delimiter=";"):
+            nome = re.sub(r"\s+", " ", (r.get("corretora") or "").strip()).upper()
+            cn = re.sub(r"\D", "", r.get("cnpj") or "")
+            su = re.sub(r"\D", "", r.get("susep") or "").lstrip("0")
+            if not nome: continue
+            if len(cn) != 14 or cn in vistos_c: cn = ""
+            if su in vistos_s: su = ""
+            vistos_c.add(cn); vistos_s.add(su)
+            linhas_ok.append((nome, cn, su))
+    if not linhas_ok: return
+    info(f"1b · Corretoras da planilha ({len(linhas_ok)})")
+    valores = ",\n".join(f"({q(n)}, {q(c)}, {q(s)})" for n, c, s in linhas_ok)
+    sql(f"""create temp table if not exists _imp_corr (nome text, cnpj text, susep text);
+truncate _imp_corr;
+insert into _imp_corr values
+{valores};
+do $imp$
+declare r record; cid uuid;
+begin
+  for r in select * from _imp_corr loop
+    begin
+      cid := null;
+      if r.cnpj <> '' then select id into cid from public.corretoras where cnpj = r.cnpj limit 1; end if;
+      if cid is null and r.susep <> '' then select id into cid from public.corretoras where susep = r.susep limit 1; end if;
+      if cid is null then select id into cid from public.corretoras where upper(nome) = r.nome limit 1; end if;
+      if cid is null then
+        insert into public.corretoras (nome, cnpj, susep) values (r.nome, nullif(r.cnpj, ''), nullif(r.susep, ''));
+      else
+        update public.corretoras set nome = r.nome, cnpj = coalesce(nullif(r.cnpj, ''), cnpj), susep = coalesce(nullif(r.susep, ''), susep) where id = cid;
+      end if;
+    exception when unique_violation then
+      raise notice 'corretora ignorada (CNPJ ou SUSEP já usado por outra): %', r.nome;
+    end;
+  end loop;
+end $imp$;""")
 
 def convidar(url, service, resend, remetente, app_url, email, nome):
     """Gera o link de criar senha no Supabase e manda pelo Resend (mesmo texto do convite do app)."""

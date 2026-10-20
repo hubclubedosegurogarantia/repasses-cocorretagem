@@ -24,7 +24,7 @@ const today = new Date();
 const ymNow = ym(today);
 const S = {view:"boot", session:null, me:null, nomes:{}, docs:[], apolices:[], emissoras:[], emisId:null, emisMenu:false, pEdit:null, rep:{periodo:"mes",por:"corretora",open:null}, corretoras:[], seguradoras:[], ctab:"corretoras", sEdit:null, cq:"", cEdit:null, imp:null, loading:true, loadError:null,
   month:ymNow, page:"dashboard", sideOpen:false, calDay:null, cfgL:null, tab:"pagar", det:false, editPay:null, ultimaBaixa:null, q:"", fStatus:"todos", fDir:"todos", fScope:"mes",
-  editing:null, confirming:null, dem:null, ext:null, menuOpen:false, push:{supported:false, on:false, busy:false}, channel:null};
+  editing:null, confirming:null, dem:null, ext:null, ficha:null, menuOpen:false, push:{supported:false, on:false, busy:false}, channel:null};
 
 // ---------------- utilitários ----------------
 function ym(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")}
@@ -95,6 +95,12 @@ function comHint(){const h=$("comHint");const e=S.editing;if(!h||!e)return;const
   h.textContent=e.comAuto?(r&&r.comissao_padrao!=null?`Padrão da ${r.nome}. Ajuste se esta apólice for diferente.`:`Padrão de ${numInput(COMISSAO_PADRAO)}%. Ajuste se esta apólice for diferente.`):""}
 function segRazao(n){const r=segReg(n);return r&&r.razao_social?r.razao_social:(n||"")}
 function corretoraPorNome(n){const k=key(n);return k?S.corretoras.find(x=>key(x.nome)===k):null}
+// pela razão social, mesmo escrita diferente ("MARCA COR DE SEG LT" × "Marca Corretora de Seguros Ltda")
+const RZ_FORA=new Set(["ltda","lt","ltd","me","epp","eireli","sa","s","a","corretora","corretagem","cor","corr","de","da","do","dos","das","e","seguros","seguro","seg","segs","adm","administracao","administradora","previdencia","consultoria","gerais","garantia","garantias"]);
+function rzTokens(n){return key(n).replace(/[^a-z0-9 ]/g," ").split(/\s+/).filter(w=>w&&!RZ_FORA.has(w))}
+function corretoraPorRazao(n){const t=rzTokens(n);if(!t.length)return null;
+  const cands=S.corretoras.map(x=>{const u=rzTokens(x.nome);const comuns=t.filter(w=>u.includes(w)).length;return {x,ok:u.length&&u[0]===t[0],sc:comuns/Math.max(t.length,u.length)}}).filter(c=>c.ok&&c.sc>=0.5).sort((a,b)=>b.sc-a.sc);
+  return cands.length&&(cands.length===1||cands[0].sc>cands[1].sc)?cands[0].x:null}
 function tituloCaso(t){const conect=/^(e|de|da|do|dos|das)$/i;return String(t||"").split(/\s+/).map((w,i)=>conect.test(w)&&i?w.toLowerCase():w.length<=2&&w===w.toUpperCase()?w:w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(" ")}
 // selo para apólices emitidas por uma corretora do grupo (ex.: Nosso Porto)
 function grupoTag(d){return d&&d.emitida_por?`<span class="tag-grupo" title="Apólice emitida pela ${esc(d.emitida_por)}, do mesmo grupo da ${esc(emisCurto())}">${esc(tituloCaso(curtoDe(d.emitida_por)))}</span>`:""}
@@ -211,6 +217,7 @@ async function load(){
   S.docs=achatar(S.apolices);
   render();
   if(S.ext&&S.ext.fase==="pronto"&&!S.editing&&!S.dem)renderExtrato();
+  else if(S.ficha&&!S.editing&&!S.dem)renderFicha();
   if(S.editing&&S.editing.id&&!S.apolices.find(x=>x.id===S.editing.id)){closePanel(false);toast("Esta apólice foi excluída por outra pessoa.")}
 }
 // Cada parcela vira um item de pagamento (ou recebimento) com os dados da apólice
@@ -742,6 +749,7 @@ function closePanel(saved,silent){
   const e=S.editing;S.editing=null;const pr=$("panelRoot");if(pr)pr.innerHTML="";
   if(e&&!saved&&e.added.length&&sb)sb.storage.from(BUCKET).remove(e.added.map(a=>a.path)).catch(()=>{});
   if(e&&S.ext&&!S.dem)renderExtrato();
+  else if(e&&S.ficha&&!S.dem)renderFicha();
 }
 function curtoDe(n){n=n||"";const m=n.replace(/\s+(LTDA|S\.?A\.?|ME|EPP|EIRELI)\.?$/i,"").replace(/\s+(CORRETORA|CORRETAGEM|COR)(\s+DE\s+(SEGUROS|SEG))?\.?$/i,"").replace(/\s+DE\s+SEGUROS$/i,"").replace(/\s+(ADMINISTRADORA\s+E|E)$/i,"").replace(/\s+ADMINISTRADORA$/i,"").trim()||n;return m.length>22?m.split(" ").slice(0,2).join(" "):m}
 function emisCurto(){return curtoDe(EMIS.nome)}
@@ -974,7 +982,7 @@ function aplicarIA(r,a){
     if(outras.length>1)avisos.push(`O documento tem ${outras.length} corretoras parceiras (${outras.map(c=>c.nome).join(", ")}). Preenchi ${parc.nome}; ajuste se for outra.`);
     if(parc){const su=susepN(parc.susep||"");const cn=normCnpj(parc.cnpj||"");
       const ant=su&&S.apolices.find(x=>susepN(x.corretor_susep||"")===su);
-      const reg=(cn&&corretoraPorCnpj(cn))||(su&&S.corretoras.find(x=>susepN(x.susep||"")===su))||corretoraPorNome(parc.nome)||(ant?{nome:ant.corretor,cnpj:ant.corretor_cnpj||""}:null);
+      const reg=(cn&&corretoraPorCnpj(cn))||(su&&S.corretoras.find(x=>susepN(x.susep||"")===su))||corretoraPorNome(parc.nome)||corretoraPorRazao(parc.nome)||(ant?{nome:ant.corretor,cnpj:ant.corretor_cnpj||""}:null);
       set("corretor",reg?reg.nome:String(parc.nome).trim(),(x,y)=>key(x)===key(y));
       const cnpjF=cn&&cnpjValido(cn)?cn:(reg&&reg.cnpj)||"";if(cnpjF)set("corretor_cnpj",cnpjF,(x,y)=>normCnpj(x)===normCnpj(y));
       if(su&&!D.corretor_susep)D.corretor_susep=su;
@@ -1162,7 +1170,7 @@ function renderDem(){
   const D=S.dem;if(!D)return;
   $("panelRoot").innerHTML=`<div class="scrim" data-action="demClose"></div>
   <aside class="panel dem" role="dialog" aria-modal="true" aria-labelledby="demT">
-    <div class="p-head">${D.voltar?`<button class="iconbtn" data-action="demClose" aria-label="Voltar ao extrato">←</button>`:""}<h2 id="demT">Demonstrativo de pagamento</h2><button class="iconbtn" data-action="demFechar" aria-label="Fechar">✕</button></div>
+    <div class="p-head">${D.voltar?`<button class="iconbtn" data-action="demClose" aria-label="${D.voltar==="ficha"?"Voltar à corretora":"Voltar ao extrato"}">←</button>`:""}<h2 id="demT">Demonstrativo de pagamento</h2><button class="iconbtn" data-action="demFechar" aria-label="Fechar">✕</button></div>
     <div class="p-body">
       <div class="dem-corr"><b>${esc(D.nome||"Corretora sem nome")}</b>${D.cnpj?`<span class="num">CNPJ ${esc(fmtCnpj(D.cnpj))}</span>`:`<span class="warn-txt">sem CNPJ</span>`}${D.titulo?`<span class="meta">${esc(D.titulo)}</span>`:""}</div>
       <div class="dem-list" role="group" aria-label="Parcelas no demonstrativo">${D.itens.map(d=>`<label class="dem-it">
@@ -1184,7 +1192,7 @@ function renderDem(){
   </aside>`;
   renderDemTot();
 }
-function demFechar(tudo){const D=S.dem;S.dem=null;if(D&&D.voltar==="extrato"&&!tudo&&S.ext)renderExtrato();else{if(tudo)S.ext=null;$("panelRoot").innerHTML=""}}
+function demFechar(tudo){const D=S.dem;S.dem=null;if(D&&D.voltar==="extrato"&&!tudo&&S.ext)renderExtrato();else if(S.ficha&&!tudo)renderFicha();else{if(tudo){S.ext=null;S.ficha=null}$("panelRoot").innerHTML=""}}
 // dados prontos para o arquivo
 function demDados(){
   demLer();const D=S.dem;const T=demTotais();if(!T.it.length){toast("Marque pelo menos uma parcela.");return null}
@@ -1367,48 +1375,73 @@ function extLancar(i){
 }
 
 // ---------------- corretoras (nome + CNPJ) ----------------
+// apólices (parcelas) de uma corretora da lista: pelo CNPJ, pelo código SUSEP ou pelo nome
+function docsDaCorretora(x){const su=susepN(x.susep||""),k=key(x.nome);return S.docs.filter(d=>(x.cnpj&&d.corretor_cnpj===x.cnpj)||(!d.corretor_cnpj&&((su&&susepN(d.corretor_susep||"")===su)||(k&&key(d.corretor)===k))))}
+function resumoCorretora(x){const l=docsDaCorretora(x);const ab=l.filter(d=>!d.pago);const sm=f=>Math.round(ab.filter(f).reduce((a,d)=>a+(Number(d.valor_repasse)||0),0)*100)/100;
+  return {docs:l,apolices:new Set(l.map(d=>d.id)).size,pagar:sm(d=>dirDe(d)==="pagar"),receber:sm(d=>dirDe(d)==="receber"),atraso:ab.some(emAtraso)}}
+const MAI=t=>String(t||"").toLocaleUpperCase("pt-BR");
 function renderCorretoras(c){
   const q=key(S.cq);const qd=soDigitos(S.cq);
-  const uso={};S.docs.forEach(d=>{const k=d.corretor_cnpj||("n"+key(d.corretor));uso[k]=(uso[k]||0)+1});
-  const list=S.corretoras.filter(x=>!q||key(x.nome).includes(q)||(qd&&(x.cnpj||"").includes(qd)));
+  const list=S.corretoras.filter(x=>!q||key(x.nome).includes(q)||(qd&&((x.cnpj||"").includes(qd)||soDigitos(x.susep||"").includes(qd)))).map(x=>({x,r:resumoCorretora(x)}))
+    .sort((a,b)=>(b.r.pagar+b.r.receber)-(a.r.pagar+a.r.receber)||a.x.nome.localeCompare(b.x.nome));
   const ed=S.cEdit;const focusQ=document.activeElement&&document.activeElement.id==="cq";
-  const editRow=(x)=>`<tr class="editing"><td><input id="ceNome" value="${esc(x?x.nome:"")}" placeholder="Nome da corretora" aria-label="Nome da corretora"></td>
-    <td><input id="ceCnpj" class="num" inputmode="numeric" value="${esc(x&&x.cnpj?fmtCnpj(x.cnpj):"")}" placeholder="00.000.000/0000-00" aria-label="CNPJ"></td><td></td>
-    <td class="r"><button class="btn small ghost" data-action="cCancel">Cancelar</button><button class="btn small primary" data-action="cSave">Salvar</button></td></tr>`;
+  const editRow=(x)=>`<tr class="editing"><td colspan="6"><div class="ce-form">
+      <div class="f"><label for="ceNome">Razão social</label><input id="ceNome" value="${esc(x?x.nome:"")}" placeholder="Nome da corretora"></div>
+      <div class="f"><label for="ceCnpj">CNPJ</label><input id="ceCnpj" class="num" inputmode="numeric" value="${esc(x&&x.cnpj?fmtCnpj(x.cnpj):"")}" placeholder="00.000.000/0000-00"></div>
+      <div class="f"><label for="ceSusep">Código SUSEP</label><input id="ceSusep" class="num" inputmode="numeric" value="${esc(x&&x.susep||"")}" placeholder="Só números"></div>
+      <div class="ce-act"><button class="btn small ghost" data-action="cCancel">Cancelar</button><button class="btn small primary" data-action="cSave">Salvar</button></div></div></td></tr>`;
   c.innerHTML=`<div class="filters">
-      <input id="cq" type="search" placeholder="Buscar por nome ou CNPJ…" value="${esc(S.cq)}" aria-label="Buscar corretora">
-      ${S.corretoras.length?`<button class="btn" data-action="cExport">Exportar CSV</button>`:""}
+      <input id="cq" type="search" placeholder="Buscar por nome, CNPJ ou SUSEP…" value="${esc(S.cq)}" aria-label="Buscar corretora">
       <button class="btn primary" data-action="cNew">+ Nova corretora</button>
     </div>
-    ${S.corretoras.length||ed?`<div class="tablebox"><table class="ctable">
-      <thead><tr><th>Corretora</th><th>CNPJ</th><th class="r">Apólices</th><th class="r"></th></tr></thead>
-      <tbody>${ed&&ed.id==="novo"?editRow(null):""}${list.map(x=>ed&&ed.id===x.id?editRow(x):ed&&ed.del===x.id
-        ?`<tr><td colspan="3"><b>Excluir ${esc(x.nome)} da lista?</b> <span class="meta">As apólices já lançadas não mudam.</span></td><td class="r"><button class="btn small ghost" data-action="cCancel">Cancelar</button><button class="btn small danger" data-action="cDelOk" data-id="${esc(x.id)}">Excluir</button></td></tr>`
-        :`<tr><td>${esc(x.nome)}</td><td class="num">${x.cnpj?esc(fmtCnpj(x.cnpj)):'<span class="meta">sem CNPJ</span>'}</td><td class="r num">${uso[x.cnpj]||uso["n"+key(x.nome)]||""}</td>
-          <td class="r"><button class="btn small ghost" data-action="cEdit" data-id="${esc(x.id)}">Editar</button><button class="iconbtn" data-action="cDel" data-id="${esc(x.id)}" aria-label="Excluir ${esc(x.nome)}">✕</button></td></tr>`).join("")}</tbody>
-      <tfoot><tr><td colspan="4">${list.length} de ${S.corretoras.length} corretora${S.corretoras.length!==1?"s":""}</td></tr></tfoot></table></div>`
-    :`<div class="empty"><h3>Nenhuma corretora na lista</h3><p>Importe a planilha (CSV ou Excel com as colunas de nome e CNPJ) ou inclua uma a uma. Corretoras digitadas ao lançar uma apólice também entram aqui.</p></div>`}`;
+    ${S.corretoras.length||ed?`<div class="tablebox"><table class="ctable cortab">
+      <thead><tr><th>Corretora</th><th>CNPJ</th><th>SUSEP</th><th class="r">Apólices</th><th class="r">A pagar</th><th class="r">A receber</th><th class="r"></th></tr></thead>
+      <tbody>${ed&&ed.id==="novo"?editRow(null):""}${list.map(({x,r})=>ed&&ed.id===x.id?editRow(x):ed&&ed.del===x.id
+        ?`<tr><td colspan="6"><b>Excluir ${esc(MAI(x.nome))} da lista?</b> <span class="meta">As apólices já lançadas não mudam.</span></td><td class="r"><button class="btn small ghost" data-action="cCancel">Cancelar</button><button class="btn small danger" data-action="cDelOk" data-id="${esc(x.id)}">Excluir</button></td></tr>`
+        :`<tr class="clic" data-action="cFicha" data-id="${esc(x.id)}" tabindex="0"><td class="c-nome">${esc(MAI(x.nome))}${r.atraso?' <span class="tag-atr">atraso</span>':""}</td>
+          <td class="num">${x.cnpj?esc(fmtCnpj(x.cnpj)):'<span class="warn-txt">sem CNPJ</span>'}</td><td class="num">${esc(x.susep||"—")}</td><td class="r num">${r.apolices||"—"}</td>
+          <td class="r num">${r.pagar?`<b class="dir out">${money(r.pagar)}</b>`:"—"}</td><td class="r num">${r.receber?`<b class="dir in">${money(r.receber)}</b>`:"—"}</td>
+          <td class="r nowrap"><button class="btn small ghost" data-action="cEdit" data-id="${esc(x.id)}">Editar</button><button class="iconbtn" data-action="cDel" data-id="${esc(x.id)}" aria-label="Excluir ${esc(x.nome)}">✕</button></td></tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="7">${list.length} de ${S.corretoras.length} corretora${S.corretoras.length!==1?"s":""} · A pagar e A receber somam o que está em aberto</td></tr></tfoot></table></div>`
+    :`<div class="empty"><h3>Nenhuma corretora na lista</h3><p>As corretoras da planilha entram na próxima publicação. Corretoras digitadas ao lançar uma apólice também entram aqui.</p></div>`}`;
   if(focusQ){const i=$("cq");i.focus();i.setSelectionRange(i.value.length,i.value.length)}
   if(ed&&!ed.del&&$("ceNome"))$("ceNome").focus();
 }
 async function cSave(){
-  const ed=S.cEdit;const nome=$("ceNome").value.trim();const cn=normCnpj($("ceCnpj").value);
-  if(!nome){toast("Informe o nome da corretora.");return}
+  const ed=S.cEdit;const nome=$("ceNome").value.trim();const cn=normCnpj($("ceCnpj").value);const su=susepN($("ceSusep").value)||null;
+  if(!nome){toast("Informe a razão social.");return}
   if(cn&&!cnpjValido(cn)){toast("CNPJ inválido. Confira os números ou deixe em branco.");return}
   const dup=cn&&S.corretoras.find(x=>x.cnpj===cn&&x.id!==ed.id);
   if(dup){toast(`Este CNPJ já está na lista como "${dup.nome}".`);return}
-  const row={nome,cnpj:cn||null};
+  const dupS=su&&S.corretoras.find(x=>susepN(x.susep||"")===su&&x.id!==ed.id);
+  if(dupS){toast(`Este código SUSEP já está na lista como "${dupS.nome}".`);return}
+  const row={nome,cnpj:cn||null,susep:su};
   const r=ed.id==="novo"?await sb.from("corretoras").insert(row):await sb.from("corretoras").update(row).eq("id",ed.id);
   if(r.error){toast(errMsg(r.error));return}
   S.cEdit=null;toast(ed.id==="novo"?"Corretora incluída.":"Corretora atualizada.");load();
 }
 async function cDelete(id){const r=await sb.from("corretoras").delete().eq("id",id);if(r.error){toast(errMsg(r.error));return}S.cEdit=null;toast("Corretora excluída da lista.");load()}
-function cExport(){
-  const cell=v=>{const s=String(v??"");return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
-  const lines=["Corretora;CNPJ"].concat(S.corretoras.map(x=>[x.nome,x.cnpj?fmtCnpj(x.cnpj):""].map(cell).join(";")));
-  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"}));a.download="corretoras.csv";document.body.appendChild(a);a.click();a.remove();
+// ficha da corretora: dados, saldo em aberto e apólices
+function openFicha(id){S.ficha=id;renderFicha()}
+function renderFicha(){
+  const x=S.corretoras.find(c=>c.id===S.ficha);if(!x){S.ficha=null;$("panelRoot").innerHTML="";return}
+  const r=resumoCorretora(x);const pag=r.docs.filter(d=>dirDe(d)==="pagar");
+  const aps=[...new Map(r.docs.map(d=>[d.id,d])).values()].sort((a,b)=>String(b.data_emissao||"").localeCompare(String(a.data_emissao||"")));
+  const linhaAp=a=>{const ps=r.docs.filter(d=>d.id===a.id).sort((p,q)=>p.parcela_num-q.parcela_num);const rec=dirDe(a)==="receber";const ab=ps.filter(d=>!d.pago);
+    const prox=ab.map(d=>d.vencimento).filter(Boolean).sort()[0];const atr=ab.some(emAtraso);
+    return `<li data-action="edit" data-id="${esc(a.id)}" tabindex="0"><i class="${rec?"in":"out"}${atr?" late":""}" aria-hidden="true">${!ab.length?"✓":rec?"↙":"↗"}</i>
+      <div><b class="num">${esc(a.apolice||"s/ nº")}</b><small>${esc(a.tomador||"—")}</small><span class="fi-meta">${segTag(a.seguradora)}<span>${ps.length>1?`${ps.length-ab.length}/${ps.length} parcelas quitadas`:ab.length?"em aberto":"quitada"}${prox?` · próximo venc. ${esc(dateBR(prox))}`:""}</span></span></div>
+      <span class="num fi-v ${rec?"in":"out"}">${money(ab.reduce((s,d)=>s+(Number(d.valor_repasse)||0),0)||ps.reduce((s,d)=>s+(Number(d.valor_repasse)||0),0))}</span></li>`};
+  $("panelRoot").innerHTML=`<div class="scrim" data-action="fichaFechar"></div>
+  <aside class="panel ficha" role="dialog" aria-modal="true" aria-labelledby="fiT">
+    <div class="p-head"><h2 id="fiT">${esc(MAI(x.nome))}</h2><button class="iconbtn" data-action="fichaFechar" aria-label="Fechar">✕</button></div>
+    <div class="p-body">
+      <dl class="fi-dados"><div><dt>CNPJ</dt><dd class="num">${x.cnpj?esc(fmtCnpj(x.cnpj)):'<span class="warn-txt">não informado</span>'}</dd></div><div><dt>Código SUSEP</dt><dd class="num">${esc(x.susep||"—")}</dd></div><div><dt>Apólices</dt><dd class="num">${r.apolices}</dd></div></dl>
+      <div class="cd-tot"><div class="out"><span>A pagar em aberto</span><b class="num">${money(r.pagar)}</b></div><div class="in"><span>A receber em aberto</span><b class="num">${money(r.receber)}</b></div></div>
+      <div class="fi-acts"><button class="btn small" data-action="cEditFicha" data-id="${esc(x.id)}">Editar dados</button>${pag.length?`<button class="btn small" data-action="fichaDem">Demonstrativo</button>`:""}</div>
+      <section><h3 class="fi-h">Apólices</h3>${aps.length?`<ul class="fi-list">${aps.map(linhaAp).join("")}</ul>`:'<p class="meta">Nenhuma apólice lançada com esta corretora.</p>'}</section>
+    </div></aside>`;
 }
-
 // ----- seguradoras -----
 function renderSeguradoras(c){
   const q=key(S.sq||"");const qd=soDigitos(S.sq||"");const uso={};S.docs.forEach(d=>{if(d.seguradora){const k=key(d.seguradora);uso[k]=(uso[k]||0)+1}});
@@ -1772,7 +1805,10 @@ document.addEventListener("click",ev=>{
     case "cDelOk":cDelete(t.dataset.id);break;
     case "cCancel":S.cEdit=null;renderCorretoras($("content"));break;
     case "cSave":cSave();break;
-    case "cExport":cExport();break;
+    case "cFicha":openFicha(t.dataset.id);break;
+    case "fichaFechar":S.ficha=null;$("panelRoot").innerHTML="";break;
+    case "cEditFicha":S.ficha=null;$("panelRoot").innerHTML="";S.cEdit={id:t.dataset.id};go("corretoras");break;
+    case "fichaDem":{const x=S.corretoras.find(c=>c.id===S.ficha);if(x){const l=resumoCorretora(x).docs.filter(d=>dirDe(d)==="pagar"&&!d.pago);openDem(l.length?l:resumoCorretora(x).docs,{titulo:"Parcelas em aberto",voltar:"ficha"})}break}
     case "toNotif":S.menuOpen=false;go("notificacoes");break;
     case "repOpen":S.rep.open=S.rep.open===t.dataset.k?null:t.dataset.k;render();break;
     case "repXlsx":repExportar();break;
@@ -1885,11 +1921,12 @@ document.addEventListener("click",ev=>{
   }
 });
 document.addEventListener("keydown",ev=>{
-  if(ev.key==="Escape"){if(S.menuOpen){S.menuOpen=false;renderMenu()}else if(S.sideOpen){S.sideOpen=false;render()}else if(S.imp){S.imp=null;$("panelRoot").innerHTML=""}else if(S.dem)demFechar(false);else if(S.editing)closePanel(false);else if(S.ext){S.ext=null;$("panelRoot").innerHTML=""}else if($("panelRoot").innerHTML)closePanel(false)}
-  if(ev.key==="Enter"&&(ev.target.id==="ceNome"||ev.target.id==="ceCnpj")){ev.preventDefault();cSave();return}
+  if(ev.key==="Escape"){if(S.menuOpen){S.menuOpen=false;renderMenu()}else if(S.sideOpen){S.sideOpen=false;render()}else if(S.imp){S.imp=null;$("panelRoot").innerHTML=""}else if(S.dem)demFechar(false);else if(S.editing)closePanel(false);else if(S.ext){S.ext=null;$("panelRoot").innerHTML=""}else if(S.ficha){S.ficha=null;$("panelRoot").innerHTML=""}else if($("panelRoot").innerHTML)closePanel(false)}
+  if(ev.key==="Enter"&&["ceNome","ceCnpj","ceSusep"].includes(ev.target.id)){ev.preventDefault();cSave();return}
   if(ev.key==="Enter"&&["seNome","seRazao","seCnpj","seCom"].includes(ev.target.id)){ev.preventDefault();sSave();return}
   if(ev.key==="Enter"&&(["peNome","peCnpj","peSusep"].includes(ev.target.id)||ev.target.dataset.gi!=null)){ev.preventDefault();pSave();return}
   if((ev.key==="Enter"||ev.key===" ")&&ev.target.matches("[data-action='edit']")){ev.preventDefault();openPanel(ev.target.dataset.id)}
+  if((ev.key==="Enter"||ev.key===" ")&&ev.target.matches("[data-action='cFicha']")){ev.preventDefault();openFicha(ev.target.dataset.id)}
 });
 function gv(id){return $(id).value}
 function segHint(){const h=$("segHint");if(!h)return;const v=$("seguradora").value.trim();if(!v){h.textContent="";return}
@@ -1925,7 +1962,7 @@ document.addEventListener("input",ev=>{
     recalcParcelas(d);renderParcelas();updateCalc();
   }
   if(S.editing.ai&&["corretor","corretor_cnpj","premio","comissao_pct","venc1"].includes(id)){clearTimeout(S.editing.aiT);S.editing.aiT=setTimeout(()=>{if(S.editing&&S.editing.ai){readForm();renderAiBox()}},400)}
-  if(id==="corretor"){const nome=ev.target.value;const c=corretoraPorNome(nome);const ci=$("corretor_cnpj");if(c&&c.cnpj&&!ci.value){ci.value=fmtCnpj(c.cnpj)}
+  if(id==="corretor"){const nome=ev.target.value;const c=corretoraPorNome(nome)||(nome.length>=4?corretoraPorRazao(nome):null);const ci=$("corretor_cnpj");if(c&&c.cnpj&&!ci.value){ci.value=fmtCnpj(c.cnpj)}
     cnpjHint()}
   if(id==="corretor_cnpj"){const cn=normCnpj(ev.target.value);if(cn.length===14){const c=corretoraPorCnpj(cn);const ni=$("corretor");if(c&&!ni.value)ni.value=c.nome;ev.target.value=fmtCnpj(cn)}cnpjHint()}
   if(id==="seguradora"){segHint();if(S.editing.comAuto)aplicarComissaoPadrao(true)}
