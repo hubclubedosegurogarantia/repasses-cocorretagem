@@ -107,10 +107,12 @@ async function resumo(em: Em, ym: string) {
     nMes: pagarMes.linhas.length + receberMes.linhas.length, nAtraso: pagarAtraso.linhas.length + receberAtraso.linhas.length };
 }
 type Resumo = Awaited<ReturnType<typeof resumo>>;
-async function destinatariosEmail(em: Em, tipo: "fechamento" | "atraso", soEmail?: string) {
+// tipos de aviso que cada pessoa escolhe receber (por e-mail e no celular) em Notificações
+type TipoAviso = "cobrancas" | "pendencias" | "relatorio";
+async function destinatariosEmail(em: Em, tipo: TipoAviso, soEmail?: string) {
   if (soEmail) return [soEmail.toLowerCase()];
-  const { data, error } = await admin.from("destinatarios").select("email").eq("emissora_id", em.id).eq(tipo, true);
-  if (!error && data && data.length) return data.map((d) => d.email.toLowerCase());
+  const { data: todos, error } = await admin.from("destinatarios").select("email, email_tipos").eq("emissora_id", em.id);
+  if (!error && todos && todos.length) return todos.filter((d) => (d.email_tipos ?? []).includes(tipo)).map((d) => d.email.toLowerCase());
   // lista vazia ou tabela ausente: usa a equipe autorizada
   const { data: aut } = await admin.from("autorizados").select("email");
   return (aut ?? []).map((a) => a.email.toLowerCase());
@@ -175,7 +177,7 @@ type Aviso = { title: string; body: string; tag: string; url?: string; actions?:
 // deno-lint-ignore no-explicit-any
 type Inscricao = any;
 const FN_BAIXA = `${SUPABASE_URL}/functions/v1/baixa`;
-async function enviarPush(aviso: Aviso | ((s: Inscricao) => Promise<Aviso>), filtro?: { excetoEmail?: string; soEmail?: string }) {
+async function enviarPush(aviso: Aviso | ((s: Inscricao) => Promise<Aviso>), filtro?: { excetoEmail?: string; soEmail?: string }, tipo?: TipoAviso) {
   if (!PUSH_ON) return { push: "desligado" };
   let q = admin.from("push_inscricoes").select("*");
   if (filtro?.soEmail) q = q.eq("email", filtro.soEmail.toLowerCase());
@@ -184,8 +186,8 @@ async function enviarPush(aviso: Aviso | ((s: Inscricao) => Promise<Aviso>), fil
   // quem foi desligado do celular (ou tirado da lista) na página Notificações não recebe push
   let permitidos: Set<string> | null = null;
   if (!filtro?.soEmail) {
-    const { data: ds, error: e2 } = await admin.from("destinatarios").select("email, push");
-    if (!e2 && ds && ds.length) permitidos = new Set(ds.filter((d) => d.push !== false).map((d) => String(d.email).toLowerCase()));
+    const { data: ds, error: e2 } = await admin.from("destinatarios").select("email, push, push_tipos");
+    if (!e2 && ds && ds.length) permitidos = new Set(ds.filter((d) => tipo ? (d.push_tipos ?? []).includes(tipo) : d.push !== false).map((d) => String(d.email).toLowerCase()));
   }
   const alvos = (subs ?? []).filter((s) => (!filtro?.excetoEmail || s.email.toLowerCase() !== filtro.excetoEmail.toLowerCase()) && (!permitidos || permitidos.has(s.email.toLowerCase())));
   let ok = 0;
@@ -229,13 +231,13 @@ async function lembreteFechamento(em: Em, ym: string, opts: { soEmail?: string; 
     : "Nada pendente no momento. Este é um envio de teste.";
   const resumoTxt = [P.total ? `pagar ${brl(P.total)}` : "", R.total ? `receber ${brl(R.total)}` : "", atrasoTxt ? `atraso: ${atrasoTxt}` : ""].filter(Boolean).join(" · ") || "nada pendente";
   const assunto = `${opts.teste ? "[Teste] " : ""}${titulo}: ${resumoTxt}`;
-  const para = await destinatariosEmail(em, "fechamento", opts.soEmail);
+  const para = await destinatariosEmail(em, "pendencias", opts.soEmail);
   const email = await enviarEmail(para, assunto, emailHtml(r, titulo, intro), emailTexto(r, titulo));
   const push = await enviarPush({
     title: `${opts.teste ? "[Teste] " : ""}${titulo}`,
     body: r.nMes || r.nAtraso ? resumoTxt.charAt(0).toUpperCase() + resumoTxt.slice(1) : "Nada pendente. Tudo certo com as notificações.",
     tag: "fechamento",
-  }, opts.soEmail ? { soEmail: opts.soEmail } : undefined);
+  }, opts.soEmail ? { soEmail: opts.soEmail } : undefined, "pendencias");
   await registrar(em, opts.teste ? "teste" : "fechamento", (opts.teste ? "[Teste] " : "") + titulo, resumoTxt, { ...email, ...push });
   return { fechamento: "enviado", ...email, ...push };
 }
@@ -249,8 +251,8 @@ async function lembretePendencias(em: Em, ym: string, hora: number) {
     : `O mês está acabando e não há nenhuma parcela em aberto.`)
     + ` Confira também se todas as apólices do mês foram lançadas no app.`;
   const resumoTxt = r.nMes || r.nAtraso ? `em aberto: pagar ${brl(P)} · receber ${brl(R)}` : "nada em aberto · confira se lançou todas as apólices";
-  const email = await enviarEmail(await destinatariosEmail(em, "fechamento"), `${titulo} · ${resumoTxt}`, emailHtml(r, titulo, intro), emailTexto(r, titulo));
-  const push = await enviarPush({ title: titulo, body: resumoTxt.charAt(0).toUpperCase() + resumoTxt.slice(1), tag: `pendencias-${hora}`, url: APP_URL ? `${APP_URL}#repasses` : undefined });
+  const email = await enviarEmail(await destinatariosEmail(em, "pendencias"), `${titulo} · ${resumoTxt}`, emailHtml(r, titulo, intro), emailTexto(r, titulo));
+  const push = await enviarPush({ title: titulo, body: resumoTxt.charAt(0).toUpperCase() + resumoTxt.slice(1), tag: `pendencias-${hora}`, url: APP_URL ? `${APP_URL}#repasses` : undefined }, undefined, "pendencias");
   await registrar(em, "pendencias", titulo, resumoTxt, { ...email, ...push });
   return { pendencias: "enviado", ...email, ...push };
 }
@@ -268,8 +270,8 @@ async function lembreteRelatorio(em: Em, ym: string) {
     <tr><td style="padding:16px 26px 24px;color:#5A6679;font-size:12px">Para deixar de receber este e-mail, abra o app → Notificações.</td></tr>
   </table></td></tr></table></body></html>`;
   const texto = [titulo, "", "Último dia do mês. Abra Relatórios no app e baixe o relatório mensal de comissões (PDF ou Excel).", link ? `\nAbrir: ${link}` : ""].join("\n");
-  const email = await enviarEmail(await destinatariosEmail(em, "fechamento"), titulo, html, texto);
-  const push = await enviarPush({ title: titulo, body: "Último dia do mês: baixe o relatório mensal em Relatórios.", tag: "relatorio", url: link || undefined });
+  const email = await enviarEmail(await destinatariosEmail(em, "relatorio"), titulo, html, texto);
+  const push = await enviarPush({ title: titulo, body: "Último dia do mês: baixe o relatório mensal em Relatórios.", tag: "relatorio", url: link || undefined }, undefined, "relatorio");
   await registrar(em, "relatorio", titulo, "relatório mensal", { ...email, ...push });
   return { relatorio: "enviado", ...email, ...push };
 }
@@ -349,7 +351,7 @@ async function avisosVencimento(em: Em, now: ReturnType<typeof agoraBrasilia>, c
   </table></td></tr></table></body></html>`;
   const texto = [titulo, "", ...itens.map((a) => `- ${pergunta(a)} ${brl(a.valor)} · ${linhaAv(a)}`), APP_URL ? `\nConfirmar: ${APP_URL}#notificacoes` : ""].join("\n");
   const assunto = `${titulo}: ${partes.join(", ")}`;
-  const email = await enviarEmail(await destinatariosEmail(em, "fechamento", opts.soEmail), assunto, html, texto);
+  const email = await enviarEmail(await destinatariosEmail(em, "cobrancas", opts.soEmail), assunto, html, texto);
   const url = APP_URL ? `${APP_URL}#notificacoes` : undefined;
   const filtro = opts.soEmail ? { soEmail: opts.soEmail } : undefined;
   let push: Record<string, unknown>;
@@ -364,13 +366,13 @@ async function avisosVencimento(em: Em, now: ReturnType<typeof agoraBrasilia>, c
           actions: [{ action: "baixa", title: a.dir === "pagar" ? "Já paguei" : "Já recebi" }],
           baixa: { api: FN_BAIXA, t, k: env("SUPABASE_ANON_KEY") },
         };
-      }, filtro)).push);
+      }, filtro, "cobrancas")).push);
     }
     push = { push: res.join(" | ") };
   } else {
     const nomes = (l: Av[]) => { const n = [...new Set(l.map((a) => curtoNome(a.corretor)))]; return n.length > 1 ? n.slice(0, -1).join(", ") + " e " + n[n.length - 1] : n[0]; };
     const corpo = [pagou.length ? `Pagar ${nomes(pagou)}` : "", recebeu.length ? `Cobrar ${nomes(recebeu)}` : "", vence.length ? `Vencem hoje: ${nomes(vence)}` : ""].filter(Boolean).join(" · ");
-    push = await enviarPush({ title: `${titulo}: ${partes.join(", ")}`, body: corpo, tag: "vencimentos", url }, filtro);
+    push = await enviarPush({ title: `${titulo}: ${partes.join(", ")}`, body: corpo, tag: "vencimentos", url }, filtro, "cobrancas");
   }
   if (!opts.teste) {
     const regs = itens.flatMap((a) => a.todos.map((n) => ({ parcela_id: a.pid, dias: n, hora: H })));

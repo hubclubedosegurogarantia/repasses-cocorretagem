@@ -376,6 +376,15 @@ create table if not exists public.destinatarios (
 );
 -- push no celular por pessoa (desligado aqui, os aparelhos dela não recebem os avisos)
 alter table public.destinatarios add column if not exists push boolean not null default true;
+-- O que cada pessoa recebe, por canal: cobrancas (avisos de parcela), pendencias (fim do mês e outros dias), relatorio
+do $$ begin   -- na primeira vez, parte do que cada um já recebia
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'destinatarios' and column_name = 'email_tipos') then
+    alter table public.destinatarios add column email_tipos text[] not null default '{cobrancas,pendencias,relatorio}';
+    alter table public.destinatarios add column push_tipos  text[] not null default '{cobrancas,pendencias,relatorio}';
+    update public.destinatarios set email_tipos = '{}' where not fechamento;
+    update public.destinatarios set push_tipos = '{}' where not push;
+  end if;
+end $$;
 
 -- Painel novo já nasce com lembretes padrão e a equipe na lista de e-mail
 create or replace function public.preparar_painel()

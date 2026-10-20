@@ -1722,19 +1722,30 @@ async function lembTeste(){
 }
 
 // ----- destinatários do e-mail de lembrete -----
+const TIPOS_AV=[["cobrancas","Cobranças das parcelas","1 e 5 dias depois do vencimento"],["pendencias","Faltou alguma pendência?","penúltimo dia do mês"],["relatorio","Relatório mensal","último dia do mês"]];
+const TODOS_AV=TIPOS_AV.map(t=>t[0]);
+function tiposDe(x,canal){const v=x[canal+"_tipos"];return Array.isArray(v)?v:(canal==="email"?(x.fechamento===false?[]:TODOS_AV):(x.push===false?[]:TODOS_AV))}
 function renderDest(){
   const box=$("destBox");if(!box)return;
   if(S.dest==null){box.innerHTML=`<div class="cb-head"><h3>Quem recebe os avisos</h3></div><p class="meta">A lista aparece depois que o SQL atualizado for rodado (passo 2).</p>`;return}
-  const equipe=new Set((S.equipe||[]).map(x=>x.email.toLowerCase()));
-  const d=S.dest;const nf=d.filter(x=>x.fechamento).length;const temPush=d.some(x=>"push" in x);
-  box.innerHTML=`<div class="cb-head"><h3>Quem recebe os avisos</h3><span class="meta">${nf} pessoa${nf!==1?"s":""} recebe${nf!==1?"m":""} por e-mail · desmarque para alguém parar de receber · pode incluir e-mails de fora da equipe, como o financeiro</span></div>
-    <div class="tablebox"><table class="ctable dtable"><thead><tr><th>Nome</th><th>E-mail</th><th class="c">Por e-mail</th>${temPush?'<th class="c">No celular</th>':""}<th class="r"></th></tr></thead><tbody>
-    ${d.map(x=>{const eq=equipe.has(x.email.toLowerCase());return `<tr><td>${esc(x.nome||"—")}${eq?' <span class="tag">equipe</span>':""}</td><td class="mail">${esc(x.email)}</td>
-      <td class="c"><input type="checkbox" class="dchk" data-email="${esc(x.email)}" data-f="fechamento"${x.fechamento?" checked":""} aria-label="${esc(x.email)} recebe os avisos por e-mail"></td>
-      ${temPush?`<td class="c">${eq?`<input type="checkbox" class="dchk" data-email="${esc(x.email)}" data-f="push"${x.push!==false?" checked":""} aria-label="${esc(x.email)} recebe os avisos no celular">`:'<span class="meta" title="Só quem tem acesso ao app instala o aviso no celular">—</span>'}</td>`:""}
-      <td class="r"><button class="iconbtn" data-action="dDel" data-email="${esc(x.email)}" aria-label="Tirar ${esc(x.email)} da lista">✕</button></td></tr>`}).join("")||`<tr><td colspan="5" class="meta">Ninguém na lista. Sem destinatários, o aviso vai para toda a equipe.</td></tr>`}
-    </tbody></table></div>
+  const equipe=new Set((S.equipe||[]).map(x=>x.email.toLowerCase()));const eu=String(S.me.email||"").toLowerCase();
+  const d=[...S.dest].sort((a,b)=>(b.email.toLowerCase()===eu)-(a.email.toLowerCase()===eu)||String(a.nome||a.email).localeCompare(String(b.nome||b.email)));
+  const pill=(x,canal,t,ok)=>{const on=tiposDe(x,canal).includes(t);return ok?`<button type="button" class="dpill${on?" on":""}" data-action="dTipo" data-email="${esc(x.email)}" data-canal="${canal}" data-t="${t}" aria-pressed="${on}">${canal==="email"?"E-mail":"Celular"}</button>`:`<span class="dpill off" title="Só quem tem acesso ao app instala no celular">Celular</span>`};
+  box.innerHTML=`<div class="cb-head"><h3>Quem recebe os avisos</h3><span class="meta">Escolha, para cada pessoa, o que ela recebe por e-mail e no celular · pode incluir e-mails de fora da equipe, como o financeiro</span></div>
+    <div class="dgrid">${d.map(x=>{const eq=equipe.has(x.email.toLowerCase());const me=x.email.toLowerCase()===eu;const nada=!tiposDe(x,"email").length&&!tiposDe(x,"push").length;
+      return `<article class="dcard${me?" me":""}"><header><div><b>${esc(x.nome||x.email.split("@")[0])}</b>${me?' <span class="tag">você</span>':eq?' <span class="tag">equipe</span>':""}<small>${esc(x.email)}</small></div>
+        <button class="iconbtn" data-action="dDel" data-email="${esc(x.email)}" aria-label="Tirar ${esc(x.email)} da lista">✕</button></header>
+        ${TIPOS_AV.map(([t,l,q])=>`<div class="drow"><div><span>${l}</span><small>${q}</small></div><div class="dps">${pill(x,"email",t,true)}${pill(x,"push",t,eq)}</div></div>`).join("")}
+        ${nada?`<p class="dnada">Não recebe nenhum aviso.</p>`:""}</article>`}).join("")||`<p class="meta">Ninguém na lista. Sem destinatários, o aviso vai para toda a equipe.</p>`}</div>
     <form id="destForm" class="dest-add"><input id="dNome" placeholder="Nome (opcional)" aria-label="Nome"><input id="dEmail" type="email" placeholder="email@empresa.com.br" aria-label="E-mail" required><button class="btn" type="submit">+ Adicionar</button></form>`;
+}
+async function destTipo(el){
+  const x=S.dest.find(d=>d.email===el.dataset.email);if(!x)return;const canal=el.dataset.canal,t=el.dataset.t;
+  const atual=tiposDe(x,canal);const novo=atual.includes(t)?atual.filter(v=>v!==t):TODOS_AV.filter(v=>v===t||atual.includes(v));
+  const patch={[canal+"_tipos"]:novo,[canal==="email"?"fechamento":"push"]:novo.length>0};if(canal==="email")patch.atraso=novo.length>0;
+  el.disabled=true;const {error}=await painelEq(sb.from("destinatarios").update(patch)).eq("email",x.email);
+  if(error){el.disabled=false;toast(errMsg(error));return}
+  Object.assign(x,patch);renderDest();
 }
 async function destAdd(){
   const email=$("dEmail").value.trim().toLowerCase();const nome=$("dNome").value.trim()||null;
@@ -1964,6 +1975,7 @@ document.addEventListener("click",ev=>{
     case "pSave":pSave();break;
     case "toConfig":S.menuOpen=false;go("configuracoes");break;
     case "dDel":destDel(t.dataset.email);break;
+    case "dTipo":destTipo(t);break;
     case "uNew":S.cfgU.form={senha:senhaAleatoria(),show:true,recebe:true};S.cfgU.criado=null;renderConfig($("page"));$("uNome").focus();break;
     case "uCancel":S.cfgU.form=null;renderConfig($("page"));break;
     case "uShow":readUForm();S.cfgU.form.show=!S.cfgU.form.show;renderConfig($("page"));break;

@@ -373,7 +373,7 @@ O sistema trabalha com uma emissora só: a **CS GARANTIA CORRETORA DE SEGUROS LT
 
 ## Quem recebe o lembrete
 
-Na página **Notificações**, a seção **Quem recebe os avisos** lista os destinatários, com duas chaves para cada pessoa: **Por e-mail** e **No celular**. Desmarque para alguém parar de receber, sem tirar o acesso ao app. Vale para todos os avisos (cobranças por parcela, dia 26 e revisão do fim do mês).
+Na página **Notificações**, a seção **Quem recebe os avisos** mostra um cartão para cada pessoa com os três avisos (**Cobranças das parcelas**, **Faltou alguma pendência?** e **Relatório mensal**) e dois botões em cada um: **E-mail** e **Celular**. Toque para ligar ou desligar aquele aviso só para aquela pessoa, sem tirar o acesso ao app. O botão de teste ("Enviar teste agora") ignora essas escolhas e manda tudo para quem clicou.
 
 Dá para incluir e-mails de fora da equipe, como o financeiro ou a contabilidade (esses recebem só por e-mail), e tirar quem não precisa. As pessoas criadas em Configurações entram na lista automaticamente, com as duas chaves ligadas. O push no celular precisa ser ativado uma vez por cada pessoa, no próprio aparelho; depois, quem decide se ela recebe é a chave **No celular**.
 
