@@ -344,9 +344,16 @@ update public.config_lembretes set avisar_nova_push = false where avisar_nova_pu
 -- Avisos por vencimento de parcela: 1 dia depois do vencimento do boleto (quando a comissão cai) e 5 dias depois
 alter table public.config_lembretes add column if not exists avisos_venc boolean not null default true;
 alter table public.config_lembretes add column if not exists avisos_dias int[] not null default '{1,5}';
-alter table public.config_lembretes alter column avisos_dias set default '{1,5}';
+alter table public.config_lembretes alter column avisos_dias set default '{5}';
 -- quem ainda está no padrão antigo (dia do vencimento e 5 dias depois) passa para 1 e 5 dias depois
 update public.config_lembretes set avisos_dias = '{1,5}' where avisos_dias = '{0,5}';
+-- só a cobrança de 5 dias depois do vencimento (uma vez: depois, o que for escolhido em Notificações vale)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'config_lembretes' and column_name = 'so_cinco_dias') then
+    alter table public.config_lembretes add column so_cinco_dias boolean not null default true;
+    update public.config_lembretes set avisos_dias = '{5}' where avisos_dias = '{1,5}';
+  end if;
+end $$;
 alter table public.config_lembretes drop constraint if exists avisos_dias_validos;
 alter table public.config_lembretes add constraint avisos_dias_validos
   check (avisos_dias <@ array[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60]);

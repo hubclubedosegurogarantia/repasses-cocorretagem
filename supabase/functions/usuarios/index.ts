@@ -138,7 +138,7 @@ export function emailBoasVindas(o: { nome: string; email: string; usuario: strin
       </table></td></tr>
     <tr><td style="padding:12px 24px 4px"><div style="font-size:16px;font-weight:700;color:${INK};margin:0 6px 8px">O que você encontra no Hub</div>
       <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
-        <tr>${func("Leitura de apólice por IA", "Envie o PDF da apólice ou do boleto e a IA preenche apólice, seguradora, tomador, prêmio, comissão e parcelas. Você só confere e define a divisão.")}${func("Avisos de repasse", "1 e 5 dias depois de cada vencimento, às 8h e às 19h, por e-mail e no celular, até haver baixa. Dá para marcar Já paguei ou Já recebi direto no aviso.")}</tr>
+        <tr>${func("Leitura de apólice por IA", "Envie o PDF da apólice ou do boleto e a IA preenche apólice, seguradora, tomador, prêmio, comissão e parcelas. Você só confere e define a divisão.")}${func("Avisos de repasse", "5 dias depois de cada vencimento, às 8h e às 19h, por e-mail e no celular, até haver baixa. Dá para marcar Já paguei ou Já recebi direto no aviso.")}</tr>
         <tr>${func("Fechamento do mês", "No penúltimo dia, o aviso de pendências em aberto. No último dia, o lembrete para baixar o relatório mensal.")}${func("Repasses e calendário", "O que pagar e receber de cada corretora parceira, mês a mês, com as cobranças em atraso em destaque.")}</tr>
         <tr>${func("Demonstrativo de pagamento", "PDF ou Excel por corretora, pronto para enviar ao parceiro junto com o pagamento.")}${func("Extratos e relatórios", "Leitura do extrato de comissões para conferir com as apólices e relatórios mensais em PDF e Excel.")}</tr>
       </table></td></tr>
@@ -154,7 +154,7 @@ export function emailBoasVindas(o: { nome: string; email: string; usuario: strin
     "PRIMEIROS PASSOS", "1. Entre no Hub com o usuário (ou e-mail) e a senha temporária.", "2. Crie a sua senha (o Hub pede no primeiro acesso).",
     "3. Ative os avisos no celular em Notificações → Ativar avisos (no iPhone: Safari → Compartilhar → Adicionar à Tela de Início).",
     "4. Escolha o que receber em Notificações → Avisos ativados nesta conta → Editar.", "",
-    "O QUE VOCÊ ENCONTRA NO HUB", "- Leitura de apólice por IA", "- Avisos de repasse 1 e 5 dias depois de cada vencimento, às 8h e às 19h",
+    "O QUE VOCÊ ENCONTRA NO HUB", "- Leitura de apólice por IA", "- Avisos de repasse 5 dias depois de cada vencimento, às 8h e às 19h",
     "- Fechamento do mês: pendências no penúltimo dia e relatório no último", "- Repasses e calendário por corretora", "- Demonstrativo de pagamento em PDF ou Excel", "- Leitura de extratos e relatórios mensais", "",
     `Dúvidas? Fale com ${o.quem}${o.quemEmail ? ` (${o.quemEmail})` : ""}.`].join("\n");
   return { assunto: "Boas-vindas ao Hub de Repasses · Clube do Seguro Garantia", html, texto };
@@ -232,6 +232,7 @@ Deno.serve(async (req) => {
       if (id) { const { error } = await admin.auth.admin.deleteUser(id); if (error) return erro(error.message); }
       await admin.from("autorizados").delete().eq("email", email);
       await admin.from("push_inscricoes").delete().eq("email", email);
+      await admin.from("destinatarios").delete().eq("email", email);   // sai também da lista de avisos
       return json({ ok: true });
     }
 

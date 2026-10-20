@@ -1,7 +1,7 @@
 // Repasses de Cocorretagem · função "lembretes"
 // Envia os lembretes de repasse por E-MAIL e por PUSH (celular/computador).
 //   tipo "agenda" → chamado de hora em hora pelo banco (02_notificacoes.sql). Nos horários escolhidos (padrão 8h e 19h):
-//                   · cobranças por parcela: 1 e 5 dias depois do vencimento do boleto (uma vez em cada horário)
+//                   · cobrança por parcela: 5 dias depois do vencimento do boleto (uma vez em cada horário)
 //                   · penúltimo dia do mês: "verifique se faltou alguma pendência" (sempre)
 //                   · outros dias escolhidos (opcional): pendências do mês, só se houver algo em aberto
 //                   · último dia do mês, às 19h: "baixe o relatório mensal" (sempre)
@@ -69,7 +69,7 @@ type Cfg = ConfigLembretes & { avisar_nova_push: boolean; ultimo_fechamento: str
 async function carregarConfig(em: Em): Promise<Cfg> {
   const { data, error } = await admin.from("config_lembretes").select("*").eq("emissora_id", em.id).maybeSingle();
   if (error) throw error;
-  return data ?? { dias: [], hora: 8, antecipar_fds: true, atraso_dia_semana: null, avisar_nova_push: true, ultimo_fechamento: null, ultimo_atraso: null, avisos_venc: true, avisos_dias: [1, 5], horas: [8, 19], pendencias_fim_mes: true, relatorio_fim_mes: true, hora_relatorio: 19 };
+  return data ?? { dias: [], hora: 8, antecipar_fds: true, atraso_dia_semana: null, avisar_nova_push: true, ultimo_fechamento: null, ultimo_atraso: null, avisos_venc: true, avisos_dias: [5], horas: [8, 19], pendencias_fim_mes: true, relatorio_fim_mes: true, hora_relatorio: 19 };
 }
 function agrupar(linhas: Linha[]): Grupo[] {
   const m = new Map<string, Grupo>();
@@ -300,7 +300,7 @@ function linhaAv(a: Av) {
 async function avisosVencimento(em: Em, now: ReturnType<typeof agoraBrasilia>, cfg: Cfg, opts: { soEmail?: string; teste?: boolean } = {}) {
   const H = now.hora;
   if (cfg.avisos_venc === false && !opts.teste) return { avisos: "desligados" };
-  const dias = [...new Set((cfg.avisos_dias && cfg.avisos_dias.length ? cfg.avisos_dias : [1, 5]).map(Number))].sort((a, b) => a - b);
+  const dias = [...new Set((cfg.avisos_dias && cfg.avisos_dias.length ? cfg.avisos_dias : [5]).map(Number))].sort((a, b) => a - b);
   const { data, error } = await admin.from("parcelas")
     .select("id, numero, valor, vencimento, cocorretagens!inner(apolice, corretor, seguradora, lider, parcelas_qtd, emissora_id, emitida_por)")
     .eq("pago", false).not("vencimento", "is", null).gte("vencimento", addDias(now.iso, -75)).eq("cocorretagens.emissora_id", em.id);

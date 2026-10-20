@@ -165,7 +165,7 @@ Pronto: o app já funciona com login, lançamentos e anexos. O passo 6 liga os l
 
 É o coração do sistema: a CS não precisa lembrar de nenhuma data. Por **e-mail** e **push** (celular ou computador), a equipe recebe:
 
-- **cobranças por parcela, às 8h e às 19h:** 1 dia depois do vencimento de cada boleto ("Pagar Tinti" / "Cobrar Marca") e, se ainda não houver baixa, 5 dias depois ("Pagou?" / "Recebeu?");
+- **cobrança por parcela, às 8h e às 19h:** 5 dias depois do vencimento de cada boleto, se ainda não houver baixa ("Pagou Tinti?" / "Recebeu de Marca?");
 - **penúltimo dia do mês, às 8h e às 19h:** "Faltou alguma pendência?", com o que ainda está em aberto, sempre;
 - **último dia do mês, às 19h:** "Baixe o relatório mensal", sempre.
 
@@ -244,7 +244,6 @@ O banco passa a chamar a função de hora em hora. Ela confere os dias e os hor�
 
 | Quando | E-mail | Push |
 |---|---|---|
-| **1 dia depois do vencimento do boleto** (quando a comissão cai), às 8h e às 19h | "Pagar X" ou "Cobrar X: a comissão cai hoje" | Um aviso por parcela |
 | **5 dias depois do vencimento**, se ainda não houver baixa, às 8h e às 19h | "Pagou X?" ou "Recebeu de X? Se não, cobre" | Um aviso por parcela |
 | **Penúltimo dia do mês**, às 8h e às 19h, sempre | "Faltou alguma pendência?", com o que ainda está em aberto por corretora e parcela | Totais a pagar e a receber |
 | **Último dia do mês**, às 19h, sempre | "Baixe o relatório mensal", com o link para Relatórios | "Baixe o relatório mensal" |
@@ -252,7 +251,7 @@ O banco passa a chamar a função de hora em hora. Ela confere os dias e os hor�
 
 Se a baixa for dada de manhã, o aviso da noite daquela parcela não sai. O lembrete semanal de atrasos foi desligado: as cobranças por vencimento cuidam disso.
 
-**Avisos por vencimento.** A comissão cai na conta da corretora líder um dia depois do vencimento de cada parcela do prêmio, e os vencimentos variam de apólice para apólice. Por isso, além do lembrete do mês, o app cobra por parcela: 1 dia depois do vencimento do boleto e 5 dias depois (dá para mudar ou incluir outros, como 10). Se a data cair no sábado ou no domingo, o aviso vai na segunda. Cada aviso sai uma vez em cada horário; quando a parcela é marcada como paga ou recebida, os avisos dela param. Se a função ficar algum dia sem rodar, os avisos da última semana são recuperados no dia seguinte. Parcelas sem data de vencimento não geram aviso: a IA lê os vencimentos da apólice ou do boleto, e dá para preencher na tabela de parcelas.
+**Avisos por vencimento.** A comissão cai na conta da corretora líder um dia depois do vencimento de cada parcela do prêmio, e os vencimentos variam de apólice para apólice. Por isso, além do lembrete do mês, o app cobra por parcela 5 dias depois do vencimento do boleto (dá para incluir outros dias em Notificações, como 1 ou 10). Se a data cair no sábado ou no domingo, o aviso vai na segunda. Cada aviso sai uma vez em cada horário; quando a parcela é marcada como paga ou recebida, os avisos dela param. Se a função ficar algum dia sem rodar, os avisos da última semana são recuperados no dia seguinte. Parcelas sem data de vencimento não geram aviso: a IA lê os vencimentos da apólice ou do boleto, e dá para preencher na tabela de parcelas.
 
 ---
 
