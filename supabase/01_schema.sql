@@ -225,6 +225,10 @@ create index if not exists cocorretagens_emissora_idx on public.cocorretagens (e
 alter table public.cocorretagens add column if not exists emitida_por text;
 
 -- Parcelas da cocorretagem: cada uma é paga (ou recebida) na sua competência
+-- Fluxo direto: a comissão já cai direto na conta; a apólice fica só para controle (sem cobrança, aviso ou pendência).
+-- As parcelas ficam quitadas com pago_por = 'fluxo direto'.
+alter table public.cocorretagens add column if not exists fluxo_direto boolean not null default false;
+
 create table if not exists public.parcelas (
   id                 uuid primary key default gen_random_uuid(),
   cocorretagem_id    uuid not null references public.cocorretagens (id) on delete cascade,

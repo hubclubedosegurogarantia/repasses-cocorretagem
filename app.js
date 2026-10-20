@@ -8,7 +8,8 @@ const MODALIDADES = ["Licitante","Executante Construtor","Executante Fornecedor"
 const SEGURADORAS = ["Akad","Avla","Essor","Fairfax","Junto","Newe","Pottencial","Sancor","Sompo"];
 const NIVEIS = {"1":{label:"Nível 1 · Apoio Técnico",pct:75},"2":{label:"Nível 2 · Parceria Estratégica",pct:65},"3":{label:"Nível 3 · Condução Especializada",pct:50},"custom":{label:"Percentual negociado",pct:null}};
 const CATS = ["Apólice","Boleto","Comprovante de pagamento","Proposta","Endosso","Contrato / Edital","Nota fiscal","Outro"];
-const STATUS = {apagar:["A pagar","s-apagar"],atrasado:["Pagamento atrasado","s-atrasado"],pago:["Pago","s-pago"],areceber:["A receber","s-receber"],atrasado_r:["Recebimento atrasado","s-atrasado"],recebido:["Recebido","s-pago"]};
+const STATUS = {apagar:["A pagar","s-apagar"],atrasado:["Pagamento atrasado","s-atrasado"],pago:["Pago","s-pago"],areceber:["A receber","s-receber"],atrasado_r:["Recebimento atrasado","s-atrasado"],recebido:["Recebido","s-pago"],direto:["Fluxo direto","s-direto"]};
+const DIRETO="fluxo direto";  // pago_por das parcelas quitadas por fluxo direto
 const TYPE_BY_EXT = {pdf:"application/pdf",png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",webp:"image/webp",gif:"image/gif"};
 const BUCKET = "documentos";
 const CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>';
@@ -53,7 +54,7 @@ function key(s){return String(s||"").trim().toLowerCase().normalize("NFD").repla
 function dirDe(d){return d&&d.lider==="parceira"?"receber":"pagar"}
 // Em atraso: venceu há mais de 5 dias (depois da 2ª cobrança) e não teve baixa
 function venceuHaMais5(d){const v=d.vencimento?String(d.vencimento).slice(0,10):null;if(v)return addDias(v,5)<isoDay(today);return !!(d.competencia&&d.competencia<ymNow)}
-function status(d){const r=dirDe(d)==="receber";if(d.pago)return r?"recebido":"pago";if(venceuHaMais5(d))return r?"atrasado_r":"atrasado";return r?"areceber":"apagar"}
+function status(d){const r=dirDe(d)==="receber";if(d.pago&&(d.fluxo_direto||d.pago_por===DIRETO))return "direto";if(d.pago)return r?"recebido":"pago";if(venceuHaMais5(d))return r?"atrasado_r":"atrasado";return r?"areceber":"apagar"}
 function emAtraso(d){const st=status(d);return st==="atrasado"||st==="atrasado_r"}
 function parcTxt(d){return d.parcelas_total>1?`parcela ${d.parcela_num}/${d.parcelas_total}`:""}
 function chip(st){const [l,c]=STATUS[st];return `<span class="chip ${c}">${l}</span>`}
@@ -767,7 +768,7 @@ function secaoDirecao(md,dir){
     <div class="groups${S.det?" det":""}">${list.map(g=>{
       const allPaid=!g.open.length;const conf=S.confirming===g.k;
       const items=[...g.items].sort((a,b)=>String(a.data_emissao||"").localeCompare(String(b.data_emissao||"")));
-      const flag=allPaid?(rec?"tudo recebido":"tudo pago"):"";
+      const flag=allPaid?(items.every(d=>status(d)==="direto")?"fluxo direto":rec?"tudo recebido":"tudo pago"):"";
       return `<article class="group ${rec?"g-in":"g-out"}${allPaid?" quitado":""}">
         <div class="g-head"><div><div class="g-name"${g.cnpj?` title="CNPJ ${esc(fmtCnpj(g.cnpj))}"`:""}>${esc(String(g.name).toLocaleUpperCase("pt-BR"))}</div>${S.det&&g.cnpj?`<div class="g-meta num">${esc(fmtCnpj(g.cnpj))}</div>`:""}${flag?`<div class="g-meta">${esc(flag)}</div>`:""}</div>
           <div class="g-total num">${money(allPaid?g.tot:g.openTot)}</div></div>
@@ -784,7 +785,7 @@ function secaoDirecao(md,dir){
         :S.editPay===g.k?`<div class="confirm"><p>${rec?"Recebimento":"Pagamento"} de <span class="num">${money(somaV(g.items.filter(d=>d.pago)))}</span> (${g.items.filter(d=>d.pago).length} parcela${g.items.filter(d=>d.pago).length>1?"s":""})</p>
             <label class="meta" for="payEditDate">${rec?"Recebido":"Pago"} em</label><input type="date" id="payEditDate" value="${esc(String((g.items.find(d=>d.pago)||{}).data_pagamento||isoDay(today)).slice(0,10))}">
             <button class="btn primary small" data-action="editPaySave" data-k="${esc(g.k)}">Salvar data</button><button class="btn small danger" data-action="undoGroupPay" data-k="${esc(g.k)}">Desfazer ${rec?"recebimento":"pagamento"}</button><button class="btn small ghost" data-action="editPayCancel">Cancelar</button></div>`
-        :`<div class="g-actions">${g.items.some(d=>d.pago)?`<span class="paid-info">${rec?"Recebido":"Pago"} em ${[...new Set(g.items.filter(d=>d.pago).map(d=>dateBR(d.data_pagamento)))].join(", ")} <button class="linkbtn" data-action="editPay" data-k="${esc(g.k)}">Alterar ou desfazer</button></span>`:""}<span style="flex:1"></span>
+        :`<div class="g-actions">${g.items.some(d=>d.pago&&status(d)!=="direto")?`<span class="paid-info">${rec?"Recebido":"Pago"} em ${[...new Set(g.items.filter(d=>d.pago&&status(d)!=="direto").map(d=>dateBR(d.data_pagamento)))].join(", ")} <button class="linkbtn" data-action="editPay" data-k="${esc(g.k)}">Alterar ou desfazer</button></span>`:""}${g.items.some(d=>status(d)==="direto")?`<span class="paid-info">${g.items.every(d=>status(d)==="direto")?"Fluxo direto · só controle":"Inclui fluxo direto"}</span>`:""}<span style="flex:1"></span>
             ${rec?"":`<button class="btn small ghost" data-action="dem" data-k="${esc(g.k)}">Demonstrativo</button>`}<button class="btn small ghost" data-action="copy" data-k="${esc(g.k)}">${rec?"Copiar cobrança":"Copiar extrato"}</button>
             ${!allPaid?`<button class="btn small primary" data-action="pay" data-k="${esc(g.k)}">${rec?"Registrar recebimento":"Registrar pagamento"}</button>`:""}</div>`}
       </article>`}).join("")}</div>`;
@@ -810,7 +811,7 @@ function renderTabela(c){
 }
 
 // ---------------- painel de lançamento ----------------
-function blank(){return {apolice:"",numero_susep:"",seguradora:"",tomador:"",modalidade:"",data_emissao:isoDay(today),premio:null,comissao_pct:null,emitida_por:"",lider:"emissora",nivel:"custom",repasse_pct:null,valor_repasse:0,valor_manual:false,corretor:"",corretor_cnpj:"",corretor_susep:"",corretor_pix:"",competencia:S.month,parcelas_qtd:1,parcelas:[{numero:1,vencimento:null,premio_parcela:null,valor:0,competencia:S.month,pago:false}],observacao:"",anexos:[]}}
+function blank(){return {apolice:"",numero_susep:"",seguradora:"",tomador:"",modalidade:"",data_emissao:isoDay(today),premio:null,comissao_pct:null,emitida_por:"",lider:"emissora",fluxo_direto:false,nivel:"custom",repasse_pct:null,valor_repasse:0,valor_manual:false,corretor:"",corretor_cnpj:"",corretor_susep:"",corretor_pix:"",competencia:S.month,parcelas_qtd:1,parcelas:[{numero:1,vencimento:null,premio_parcela:null,valor:0,competencia:S.month,pago:false}],observacao:"",anexos:[]}}
 function openPanel(id){
   const d=id?S.apolices.find(x=>x.id===id):null;if(id&&!d)return;
   const data=d?{...blank(),...d,anexos:(d.anexos||[]).map(a=>({...a})),parcelas:(d.parcelas&&d.parcelas.length?d.parcelas:[{numero:1,valor:d.valor_repasse,competencia:d.competencia||S.month,pago:false}]).map(p=>({...p}))}:blank();
@@ -856,6 +857,7 @@ function renderPanel(){
           <label class="seg${d.lider!=="parceira"?" on":""}"><input type="radio" name="lider" value="emissora"${d.lider!=="parceira"?" checked":""}><b>${esc(nossoCurto(d))} é a líder</b><span>A ${esc(nossoCurto(d))} recebe da seguradora e <b>paga</b> a parceira</span></label>
           <label class="seg${d.lider==="parceira"?" on":""}"><input type="radio" name="lider" value="parceira"${d.lider==="parceira"?" checked":""}><b>A parceira é a líder</b><span>A parceira recebe da seguradora e <b>paga</b> a ${esc(nossoCurto(d))}</span></label>
         </div>
+        <label class="direto-op${d.fluxo_direto?" on":""}"><input type="checkbox" id="fluxo_direto"${d.fluxo_direto?" checked":""}><span><b>Fluxo direto · sem cobrança</b><small>O pagamento já cai direto na conta. A apólice fica só para controle: não gera aviso e não entra em a pagar, a receber nem pendências.</small></span></label>
         <fieldset>
           <div class="f"><label for="corretor">Corretora parceira</label><input id="corretor" list="dlCor" value="${esc(d.corretor)}" required placeholder="Digite para buscar na lista"><datalist id="dlCor">${S.corretoras.map(x=>`<option value="${esc(x.nome)}">${x.cnpj?esc(fmtCnpj(x.cnpj)):""}</option>`).join("")}${corretores.filter(n=>!corretoraPorNome(n)).map(n=>`<option value="${esc(n)}">`).join("")}</datalist></div>
           <div class="f"><label for="corretor_cnpj">CNPJ da parceira</label><input id="corretor_cnpj" class="num" inputmode="numeric" value="${esc(d.corretor_cnpj?fmtCnpj(d.corretor_cnpj):"")}" placeholder="00.000.000/0000-00"><span class="hint" id="cnpjHint"></span></div>
@@ -903,6 +905,7 @@ function readForm(){
   d.apolice=g("apolice").value.trim();d.numero_susep=g("numero_susep").value.trim();d.data_emissao=g("data_emissao").value;d.seguradora=g("seguradora").value.trim();
   d.modalidade=g("modalidade").value;d.tomador=g("tomador").value.trim();d.tomador_cnpj=normCnpj(g("tomador_cnpj").value);
   const L=document.querySelector('input[name="lider"]:checked');d.lider=L?L.value:"emissora";
+  {const FD=g("fluxo_direto");if(FD)d.fluxo_direto=FD.checked}
   const EP=g("emitida_por");if(EP)d.emitida_por=EP.value;
   d.corretor=g("corretor").value.trim();d.corretor_cnpj=normCnpj(g("corretor_cnpj").value);d.corretor_susep=soDigitos(g("corretor_susep").value);
   d.premio=numOrNull(g("premio").value);d.comissao_pct=numOrNull(g("comissao_pct").value);d.repasse_pct=numOrNull(g("repasse_pct").value);d.nivel=nivelDe(d.repasse_pct);
@@ -926,7 +929,7 @@ function renderParcelas(){
   box.innerHTML=`<div class="tablebox"><table class="ptable"><thead><tr><th>Nº</th><th>Vencimento (boleto)</th><th class="r">Parcela do prêmio</th><th class="r">${rec?"A receber":"A pagar"}</th><th>${rec?"Recebido":"Pago"}</th></tr></thead><tbody>
     ${d.parcelas.map((p,i)=>`<tr><td class="num">${p.numero}/${d.parcelas.length}</td><td><input type="date" data-pv="${i}" value="${esc(p.vencimento?String(p.vencimento).slice(0,10):"")}" aria-label="Vencimento da parcela ${p.numero}"></td><td class="r num">${p.premio_parcela!=null?money(p.premio_parcela):'<span class="meta">—</span>'}</td>
       <td class="r num"><b>${money(p.valor)}</b></td>
-      <td class="c pg"><input type="checkbox" data-pp="${i}"${p.pago?" checked":""} aria-label="Parcela ${p.numero} ${rec?"recebida":"paga"}">${p.pago?`<input type="date" data-pd="${i}" value="${esc(String(p.data_pagamento||isoDay(today)).slice(0,10))}" aria-label="Data do ${rec?"recebimento":"pagamento"} da parcela ${p.numero}">`:""}</td></tr>`).join("")}</tbody>
+      <td class="c pg">${d.fluxo_direto?`<span class="chip s-direto">Fluxo direto</span>`:`<input type="checkbox" data-pp="${i}"${p.pago?" checked":""} aria-label="Parcela ${p.numero} ${rec?"recebida":"paga"}">${p.pago?`<input type="date" data-pd="${i}" value="${esc(String(p.data_pagamento||isoDay(today)).slice(0,10))}" aria-label="Data do ${rec?"recebimento":"pagamento"} da parcela ${p.numero}">`:""}`}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="3">Total</td><td class="r num">${money(tot)}</td><td></td></tr></tfoot></table></div>`;
 }
 function updateCalc(){
@@ -1135,15 +1138,19 @@ async function save(){
   const row={apolice:d.apolice,numero_susep:d.numero_susep||null,data_emissao:d.data_emissao||null,seguradora:d.seguradora||null,modalidade:d.modalidade||null,tomador:d.tomador||null,tomador_cnpj:d.tomador_cnpj||null,
     lider:d.lider==="parceira"?"parceira":"emissora",emitida_por:d.emitida_por||null,corretor:d.corretor,corretor_cnpj:d.corretor_cnpj||null,corretor_susep:d.corretor_susep||null,
     premio:d.premio,comissao_pct:d.comissao_pct,nivel:nivelDe(d.repasse_pct),repasse_pct:d.repasse_pct,
-    valor_repasse:Math.round((Number(d.valor_repasse)||0)*100)/100,valor_manual:!!d.valor_manual,parcelas_qtd:d.parcelas.length,competencia:d.parcelas[0].competencia,observacao:d.observacao||null};
+    valor_repasse:Math.round((Number(d.valor_repasse)||0)*100)/100,valor_manual:!!d.valor_manual,parcelas_qtd:d.parcelas.length,competencia:d.parcelas[0].competencia,observacao:d.observacao||null,fluxo_direto:!!d.fluxo_direto};
   e.saving=true;const btn=$("saveBtn");if(btn){btn.disabled=true;btn.textContent="Salvando…"}
   try{
     let id=e.id;
     if(id){const {error}=await sb.from("cocorretagens").update(row).eq("id",id);if(error)throw error}
     else{const {data,error}=await sb.from("cocorretagens").insert({...row,emissora_id:S.emisId}).select("id").single();if(error)throw error;id=data.id}
     // parcelas: grava as N atuais e remove as que sobraram (nunca as já pagas)
+    // fluxo direto: todas as parcelas ficam quitadas (só controle); ao desligar, voltam a ficar em aberto
+    const baixa=p=>{if(d.fluxo_direto){const manual=p.pago&&p.pagoOrig&&p.pago_por&&p.pago_por!==DIRETO;return manual?{pago:true,data_pagamento:p.data_pagamento,pago_por:p.pago_por}:{pago:true,data_pagamento:p.vencimento||isoDay(today),pago_por:DIRETO}}
+      if(p.pago_por===DIRETO&&p.pagoOrig)return {pago:false,data_pagamento:null,pago_por:null};
+      return {pago:!!p.pago,data_pagamento:p.pago?(p.data_pagamento||isoDay(today)):null,pago_por:p.pago?(p.pagoOrig?(p.pago_por||null):S.me.email):null}};
     const prs=d.parcelas.map(p=>({cocorretagem_id:id,numero:p.numero,vencimento:p.vencimento||null,premio_parcela:p.premio_parcela!=null?p.premio_parcela:null,valor:Math.round((Number(p.valor)||0)*100)/100,
-      competencia:p.vencimento?String(p.vencimento).slice(0,7):p.competencia,pago:!!p.pago,data_pagamento:p.pago?(p.data_pagamento||isoDay(today)):null,pago_por:p.pago?(p.pagoOrig?(p.pago_por||null):S.me.email):null}));
+      competencia:p.vencimento?String(p.vencimento).slice(0,7):p.competencia,...baixa(p)}));
     {const {error}=await sb.from("parcelas").upsert(prs,{onConflict:"cocorretagem_id,numero"});if(error)throw error}
     if(e.id){const {error}=await sb.from("parcelas").delete().eq("cocorretagem_id",id).gt("numero",d.parcelas.length).eq("pago",false);if(error)throw error}
     const novos=e.data.anexos.filter(a=>a.novo).map(a=>({cocorretagem_id:id,path:a.path,nome:a.nome,categoria:a.categoria,content_type:a.content_type,tamanho:a.tamanho}));
@@ -1194,7 +1201,7 @@ async function desfazerBaixa(ids,rec){
 // troca a data da baixa de um grupo
 async function alterarDataBaixa(k){
   const dt=($("payEditDate")||{}).value;if(!dt){toast("Informe a data.");return}
-  const ids=monthDocs().filter(d=>grupoKey(d)===k&&d.pago).map(d=>d.pid).filter(Boolean);if(!ids.length)return;
+  const ids=monthDocs().filter(d=>grupoKey(d)===k&&d.pago&&status(d)!=="direto").map(d=>d.pid).filter(Boolean);if(!ids.length)return;
   const {error}=await sb.from("parcelas").update({data_pagamento:dt}).in("id",ids);
   if(error){toast(errMsg(error));return}
   S.editPay=null;toast(`Data alterada para ${dateBR(dt)}.`);load();
@@ -2087,7 +2094,7 @@ document.addEventListener("click",ev=>{
     case "avSave":saveAvisos();break;
     case "editPayCancel":S.editPay=null;render();break;
     case "editPaySave":t.disabled=true;alterarDataBaixa(t.dataset.k);break;
-    case "undoGroupPay":{const k=t.dataset.k;const ids=monthDocs().filter(d=>grupoKey(d)===k&&d.pago).map(d=>d.pid).filter(Boolean);t.disabled=true;desfazerBaixa(ids,k.startsWith("receber"));break}
+    case "undoGroupPay":{const k=t.dataset.k;const ids=monthDocs().filter(d=>grupoKey(d)===k&&d.pago&&status(d)!=="direto").map(d=>d.pid).filter(Boolean);t.disabled=true;desfazerBaixa(ids,k.startsWith("receber"));break}
     case "copy":copyExtrato(t.dataset.k);break;
     case "kpi":{const g=t.dataset.go;if(g==="notif"){go("notificacoes");break}
       if(g==="atraso"){const od=overdue().sort((a,b)=>String(a.vencimento||a.competencia).localeCompare(String(b.vencimento||b.competencia)));if(od.length){S.month=od[0].competencia;S.tab=dirDe(od[0])}else S.tab="pagar"}
@@ -2193,6 +2200,8 @@ document.addEventListener("change",ev=>{
   if(id==="emitida_por"){readForm();renderPanel();return}
   if(ev.target.dataset&&ev.target.dataset.pp!=null){readForm();renderParcelas();return}
   if(ev.target.dataset&&ev.target.dataset.pv!=null){const p=d.parcelas[+ev.target.dataset.pv];if(p&&ev.target.value&&!p.pago){p.vencimento=ev.target.value;p.competencia=ev.target.value.slice(0,7);if(+ev.target.dataset.pv===0){const v=$("venc1");if(v)v.value=ev.target.value}}return}
+  if(ev.target.id==="fluxo_direto"){readForm();if(!d.fluxo_direto)d.parcelas.forEach(p=>{if(p.pago_por===DIRETO){p.pago=false;p.data_pagamento=null}});
+    ev.target.closest(".direto-op").classList.toggle("on",d.fluxo_direto);renderParcelas();return}
   if(ev.target.name==="lider"){readForm();if(!d.valor_manual)d.valor_repasse=calcRepasse(d.premio,d.comissao_pct,d.repasse_pct,d.lider);recalcParcelas(d);renderPanel();return}
   if(id==="parcelas_qtd"){readForm();recalcParcelas(d);renderPanel();return}
   if(id==="venc1"){readForm();renderParcelas();return}
