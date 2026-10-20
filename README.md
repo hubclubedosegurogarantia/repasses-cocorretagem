@@ -165,11 +165,11 @@ Pronto: o app já funciona com login, lançamentos e anexos. O passo 6 liga os l
 
 É o coração do sistema: a CS não precisa lembrar de nenhuma data. Por **e-mail** e **push** (celular ou computador), a equipe recebe:
 
-- **cobranças por parcela:** 1 dia depois do vencimento de cada boleto ("Pagar Tinti" / "Cobrar Marca") e, se ainda não houver baixa, 5 dias depois ("Pagou?" / "Recebeu?");
-- **dia 26:** o que ainda falta pagar e receber no mês, só se houver algo pendente;
-- **último dia do mês:** "revise todas as cobranças e dívidas do mês", sempre.
+- **cobranças por parcela, às 8h e às 19h:** 1 dia depois do vencimento de cada boleto ("Pagar Tinti" / "Cobrar Marca") e, se ainda não houver baixa, 5 dias depois ("Pagou?" / "Recebeu?");
+- **penúltimo dia do mês, às 8h e às 19h:** "Faltou alguma pendência?", com o que ainda está em aberto, sempre;
+- **último dia do mês, às 19h:** "Baixe o relatório mensal", sempre.
 
-O horário, os dias das cobranças e o dia das pendências são ajustados no app, na página **Notificações**. Na mesma página você escolhe **quais e-mails recebem** os avisos.
+Os horários, os dias das cobranças e os avisos do fim do mês são ajustados no app, na página **Notificações**. Na mesma página você escolhe **quais e-mails recebem** os avisos.
 
 Precisa do Node instalado no computador, só para os comandos abaixo.
 
@@ -224,12 +224,12 @@ O `--no-verify-jwt` é necessário porque o agendamento do banco chama a funçã
 
 Em **Database → Extensions**, ative **pg_cron** e **pg_net**. Depois abra `supabase/02_notificacoes.sql`, troque `<<<SEU-PROJETO>>>` e `<<<O MESMO VALOR...>>>` (o mesmo `CRON_SECRET` do passo 6.3) e rode o arquivo no SQL Editor.
 
-O banco passa a chamar a função de hora em hora. Ela confere os dias e o horário escolhidos no app e só envia quando bate, uma vez por dia no máximo.
+O banco passa a chamar a função de hora em hora. Ela confere os dias e os horários escolhidos no app e só envia quando batem, uma vez em cada horário no máximo.
 
 ### 6.5 · Escolher os dias e testar
 
 1. No app, abra a página **Notificações**.
-2. Marque os dias e o horário. O padrão é dia 26 às 9h para as pendências e a revisão no último dia do mês, antecipando para sexta. A tela mostra as próximas três datas.
+2. Em **Configurações dos avisos**, confira os horários (padrão 8h e 19h) e os avisos do fim do mês. A tela mostra as próximas datas.
 3. Em **Quem recebe o e-mail**, confira a lista e inclua outros endereços, se precisar.
 4. Em **Neste aparelho**:
    - ative as notificações;
@@ -244,14 +244,15 @@ O banco passa a chamar a função de hora em hora. Ela confere os dias e o horá
 
 | Quando | E-mail | Push |
 |---|---|---|
-| **Dia 26** (ou os dias escolhidos), só se houver algo em aberto | O que falta pagar e receber no mês, por corretora e parcela, e os atrasos | Totais a pagar, a receber e em atraso |
-| **Último dia do mês** (sexta, se cair no fim de semana), sempre | "Revise todas as cobranças e dívidas do mês", com o que ainda está em aberto | Resumo do que está em aberto ou "tudo quitado" |
-| **1 dia depois do vencimento do boleto** (quando a comissão cai) | "Pagar X" ou "Cobrar X: a comissão cai hoje" | Um aviso por parcela |
-| **5 dias depois do vencimento**, se ainda não houver baixa | "Pagou X?" ou "Recebeu de X? Se não, cobre" | Um aviso por parcela |
+| **1 dia depois do vencimento do boleto** (quando a comissão cai), às 8h e às 19h | "Pagar X" ou "Cobrar X: a comissão cai hoje" | Um aviso por parcela |
+| **5 dias depois do vencimento**, se ainda não houver baixa, às 8h e às 19h | "Pagou X?" ou "Recebeu de X? Se não, cobre" | Um aviso por parcela |
+| **Penúltimo dia do mês**, às 8h e às 19h, sempre | "Faltou alguma pendência?", com o que ainda está em aberto por corretora e parcela | Totais a pagar e a receber |
+| **Último dia do mês**, às 19h, sempre | "Baixe o relatório mensal", com o link para Relatórios | "Baixe o relatório mensal" |
+| **Outros dias de pendências** (opcional, nenhum por padrão), só se houver algo em aberto | O que falta pagar e receber no mês | Totais |
 
-No dia 26, se não houver nada pendente, nada é enviado. A revisão do fim do mês sai sempre. O lembrete semanal de atrasos foi desligado: as cobranças por vencimento cuidam disso.
+Se a baixa for dada de manhã, o aviso da noite daquela parcela não sai. O lembrete semanal de atrasos foi desligado: as cobranças por vencimento cuidam disso.
 
-**Avisos por vencimento.** A comissão cai na conta da corretora líder um dia depois do vencimento de cada parcela do prêmio, e os vencimentos variam de apólice para apólice. Por isso, além do lembrete do mês, o app cobra por parcela: 1 dia depois do vencimento do boleto e 5 dias depois (dá para mudar ou incluir outros, como 10). Se a data cair no sábado ou no domingo, o aviso vai na segunda. Cada aviso sai uma vez só; quando a parcela é marcada como paga ou recebida, os avisos dela param. Se a função ficar algum dia sem rodar, os avisos da última semana são recuperados no dia seguinte. Parcelas sem data de vencimento não geram aviso: a IA lê os vencimentos da apólice ou do boleto, e dá para preencher na tabela de parcelas.
+**Avisos por vencimento.** A comissão cai na conta da corretora líder um dia depois do vencimento de cada parcela do prêmio, e os vencimentos variam de apólice para apólice. Por isso, além do lembrete do mês, o app cobra por parcela: 1 dia depois do vencimento do boleto e 5 dias depois (dá para mudar ou incluir outros, como 10). Se a data cair no sábado ou no domingo, o aviso vai na segunda. Cada aviso sai uma vez em cada horário; quando a parcela é marcada como paga ou recebida, os avisos dela param. Se a função ficar algum dia sem rodar, os avisos da última semana são recuperados no dia seguinte. Parcelas sem data de vencimento não geram aviso: a IA lê os vencimentos da apólice ou do boleto, e dá para preencher na tabela de parcelas.
 
 ---
 

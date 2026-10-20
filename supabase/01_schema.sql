@@ -318,6 +318,37 @@ drop policy if exists "autorizados leem avisos" on public.avisos_parcela;
 create policy "autorizados leem avisos" on public.avisos_parcela
   for select to authenticated using (public.is_autorizado());
 
+-- Horários fixos (8h e 19h) e fim do mês: penúltimo dia "faltou alguma pendência?" e último dia "baixe o relatório"
+do $$ begin   -- na primeira vez: o dia 26 dá lugar ao aviso do penúltimo dia (pode ser incluído de novo em Notificações)
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'config_lembretes' and column_name = 'horas') then
+    alter table public.config_lembretes add column horas int[] not null default '{8,19}';
+    update public.config_lembretes set dias = '{}' where dias = '{26}';
+  end if;
+end $$;
+alter table public.config_lembretes alter column dias set default '{}';
+alter table public.config_lembretes add column if not exists pendencias_fim_mes boolean not null default true;
+alter table public.config_lembretes add column if not exists relatorio_fim_mes boolean not null default true;
+alter table public.config_lembretes add column if not exists hora_relatorio int not null default 19;
+alter table public.config_lembretes drop constraint if exists horas_validas;
+alter table public.config_lembretes add constraint horas_validas
+  check (horas <@ array[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23] and hora_relatorio between 0 and 23);
+-- cada aviso de parcela sai uma vez em cada horário (0 = registro antigo, vale para todos os horários)
+alter table public.avisos_parcela add column if not exists hora int not null default 0;
+do $$ begin
+  if (select count(*) from information_schema.key_column_usage where table_schema = 'public' and table_name = 'avisos_parcela' and constraint_name = 'avisos_parcela_pkey') < 3 then
+    alter table public.avisos_parcela drop constraint if exists avisos_parcela_pkey;
+    alter table public.avisos_parcela add primary key (parcela_id, dias, hora);
+  end if;
+end $$;
+-- envios do calendário já feitos (ex.: "pendencias:2026-10-30:8"), para não repetir
+create table if not exists public.envios_agenda (
+  emissora_id  uuid not null references public.emissoras (id) on delete cascade,
+  chave        text not null,
+  enviado_em   timestamptz not null default now(),
+  primary key (emissora_id, chave)
+);
+alter table public.envios_agenda enable row level security;  -- só a função grava e lê
+
 -- Histórico do que foi enviado (gravado pela função "lembretes")
 create table if not exists public.notificacoes_log (
   id             bigserial primary key,
@@ -476,3 +507,13 @@ begin
   begin alter publication supabase_realtime add table public.seguradoras;   exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.emissoras;     exception when duplicate_object then null; end;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- Acesso do app às tabelas pela Data API. Fica explícito para funcionar mesmo
+-- com "Automatically expose new tables" desligado. Quem decide o que cada
+-- pessoa vê e altera continuam sendo as regras de acesso (RLS) acima;
+-- visitantes sem login (anon) não recebem nada.
+-- ---------------------------------------------------------------------
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
