@@ -785,8 +785,8 @@ function secaoDirecao(md,dir){
         :S.editPay===g.k?`<div class="confirm"><p>${rec?"Recebimento":"Pagamento"} de <span class="num">${money(somaV(g.items.filter(d=>d.pago)))}</span> (${g.items.filter(d=>d.pago).length} parcela${g.items.filter(d=>d.pago).length>1?"s":""})</p>
             <label class="meta" for="payEditDate">${rec?"Recebido":"Pago"} em</label><input type="date" id="payEditDate" value="${esc(String((g.items.find(d=>d.pago)||{}).data_pagamento||isoDay(today)).slice(0,10))}">
             <button class="btn primary small" data-action="editPaySave" data-k="${esc(g.k)}">Salvar data</button><button class="btn small danger" data-action="undoGroupPay" data-k="${esc(g.k)}">Desfazer ${rec?"recebimento":"pagamento"}</button><button class="btn small ghost" data-action="editPayCancel">Cancelar</button></div>`
-        :`<div class="g-actions">${g.items.some(d=>d.pago&&status(d)!=="direto")?`<span class="paid-info">${rec?"Recebido":"Pago"} em ${[...new Set(g.items.filter(d=>d.pago&&status(d)!=="direto").map(d=>dateBR(d.data_pagamento)))].join(", ")} <button class="linkbtn" data-action="editPay" data-k="${esc(g.k)}">Alterar ou desfazer</button></span>`:""}${g.items.some(d=>status(d)==="direto")?`<span class="paid-info">${g.items.every(d=>status(d)==="direto")?"Fluxo direto · só controle":"Inclui fluxo direto"}</span>`:""}<span style="flex:1"></span>
-            ${rec?"":`<button class="btn small ghost" data-action="dem" data-k="${esc(g.k)}">Demonstrativo</button>`}<button class="btn small ghost" data-action="copy" data-k="${esc(g.k)}">${rec?"Copiar cobrança":"Copiar extrato"}</button>
+        :`<div class="g-actions">${g.items.some(d=>d.pago&&status(d)!=="direto")?`<span class="paid-info">${rec?"Recebido":"Pago"} em ${[...new Set(g.items.filter(d=>d.pago&&status(d)!=="direto").map(d=>dateBR(d.data_pagamento)))].join(", ")} <button class="linkbtn" data-action="editPay" data-k="${esc(g.k)}">Alterar ou desfazer</button></span>`:""}${g.items.some(d=>status(d)==="direto")?`<span class="paid-info">${g.items.every(d=>status(d)==="direto")?"Fluxo direto · sem repasse":"Inclui fluxo direto"}</span>`:""}<span style="flex:1"></span>
+            <button class="btn small ghost" data-action="repExtrato" data-k="${esc(g.k)}" title="Extrato do corretor: do mês ou total">Extrato</button>${rec?"":`<button class="btn small ghost" data-action="dem" data-k="${esc(g.k)}">Demonstrativo</button>`}<button class="btn small ghost" data-action="copy" data-k="${esc(g.k)}">${rec?"Copiar cobrança":"Copiar extrato"}</button>
             ${!allPaid?`<button class="btn small primary" data-action="pay" data-k="${esc(g.k)}">${rec?"Registrar recebimento":"Registrar pagamento"}</button>`:""}</div>`}
       </article>`}).join("")}</div>`;
 }
@@ -857,7 +857,7 @@ function renderPanel(){
           <label class="seg${d.lider!=="parceira"?" on":""}"><input type="radio" name="lider" value="emissora"${d.lider!=="parceira"?" checked":""}><b>${esc(nossoCurto(d))} é a líder</b><span>A ${esc(nossoCurto(d))} recebe da seguradora e <b>paga</b> a parceira</span></label>
           <label class="seg${d.lider==="parceira"?" on":""}"><input type="radio" name="lider" value="parceira"${d.lider==="parceira"?" checked":""}><b>A parceira é a líder</b><span>A parceira recebe da seguradora e <b>paga</b> a ${esc(nossoCurto(d))}</span></label>
         </div>
-        <label class="direto-op${d.fluxo_direto?" on":""}"><input type="checkbox" id="fluxo_direto"${d.fluxo_direto?" checked":""}><span><b>Fluxo direto · sem cobrança</b><small>O pagamento já cai direto na conta. A apólice fica só para controle: não gera aviso e não entra em a pagar, a receber nem pendências.</small></span></label>
+        <label class="direto-op${d.fluxo_direto?" on":""}"><input type="checkbox" id="fluxo_direto"${d.fluxo_direto?" checked":""}><span><b>Fluxo direto · sem repasse</b><small>Comissão paga diretamente às corretoras, conforme o percentual de corretagem informado na apólice. Não gera aviso nem entra em a pagar, a receber ou pendências.</small></span></label>
         <fieldset>
           <div class="f"><label for="corretor">Corretora parceira</label><input id="corretor" list="dlCor" value="${esc(d.corretor)}" required placeholder="Digite para buscar na lista"><datalist id="dlCor">${S.corretoras.map(x=>`<option value="${esc(x.nome)}">${x.cnpj?esc(fmtCnpj(x.cnpj)):""}</option>`).join("")}${corretores.filter(n=>!corretoraPorNome(n)).map(n=>`<option value="${esc(n)}">`).join("")}</datalist></div>
           <div class="f"><label for="corretor_cnpj">CNPJ da parceira</label><input id="corretor_cnpj" class="num" inputmode="numeric" value="${esc(d.corretor_cnpj?fmtCnpj(d.corretor_cnpj):"")}" placeholder="00.000.000/0000-00"><span class="hint" id="cnpjHint"></span></div>
@@ -1251,7 +1251,7 @@ function renderDemTot(){const T=demTotais();const el=$("demTot");if(!el)return;
   const n=$("demN");if(n)n.textContent=`${T.it.length} de ${S.dem.itens.length} parcela${S.dem.itens.length>1?"s":""}`;
   document.querySelectorAll("[data-action='demPdf'],[data-action='demXlsx']").forEach(b=>b.disabled=!T.it.length)}
 function renderDem(){
-  const D=S.dem;if(!D)return;if(D.modo==="apolice"){renderExtratoAp();return}
+  const D=S.dem;if(!D)return;if(D.modo==="apolice"){renderExtratoAp();return}if(D.modo==="corretor"){renderExtratoCorr();return}
   $("panelRoot").innerHTML=`<div class="scrim" data-action="demClose"></div>
   <aside class="panel dem" role="dialog" aria-modal="true" aria-labelledby="demT">
     <div class="p-head">${D.voltar?`<button class="iconbtn" data-action="demClose" aria-label="${D.voltar==="ficha"?"Voltar à corretora":"Voltar ao extrato"}">←</button>`:""}<h2 id="demT">Demonstrativo de pagamento</h2><button class="iconbtn" data-action="demFechar" aria-label="Fechar">✕</button></div>
@@ -1441,7 +1441,7 @@ async function apPdf(btn){
   const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
   const W=297,H=210,M=12,CW=W-2*M,col2=M+CW*0.62;
   const barra=(y,t)=>{doc.setFillColor(...COR.navy);doc.rect(M,y,CW,6,"F");doc.setFont("helvetica","bold");doc.setFontSize(9);doc.setTextColor(255);doc.text(t,W/2,y+4.1,{align:"center"});doc.setTextColor(0);doc.setFont("helvetica","normal")};
-  const caixa=(x,y,w,h,t,al)=>{doc.setFillColor(...COR.gray);doc.rect(x,y,w,h,"F");if(t){doc.setFontSize(9);doc.text(String(t),al==="right"?x+w-1.5:al==="center"?x+w/2:x+1.5,y+h-1.8,{align:al||"left",maxWidth:w-3})}};
+  const caixa=(x,y,w,h,t,al)=>{doc.setFillColor(...COR.gray);doc.rect(x,y,w,h,"F");if(t){doc.setFontSize(9);let s=String(t);while(s.length>4&&doc.getTextWidth(s)>w-3)s=s.slice(0,-2).trimEnd()+"…";doc.text(s,al==="right"?x+w-1.5:al==="center"?x+w/2:x+1.5,y+h-1.8,{align:al||"left"})}};
   const ouro=y=>{doc.setDrawColor(...COR.gold);doc.setLineWidth(0.6);doc.line(M,y,W-M,y)};
   if(logo)doc.addImage(logo,"PNG",M,8,76,21.3);
   doc.setFont("helvetica","bold");doc.setFontSize(14);doc.text(X.titulo,(M+80+W-M)/2,19,{align:"center",maxWidth:W-M-(M+84)});
@@ -1529,6 +1529,158 @@ async function apXlsx(btn){
   ws.pageSetup.printArea=`A1:${LC}${r}`;
   const buf=await wb.xlsx.writeBuffer();baixarBlob(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),X.arquivo+".xlsx");
   btn.disabled=false;if(!X.rec)demGuardar();toast("Excel baixado.");
+}
+
+// ---------------- extrato do corretor (todas as apólices com ele: do mês ou total) ----------------
+// Mesmo estilo do extrato da apólice. Vai para o corretor: mostra a comissão dele; quando ele é o líder,
+// mostra também o repasse que ele deve ao Clube.
+function openExtratoCorr(docs,opts){
+  opts=opts||{};docs=(docs||[]).slice();if(!docs.length){toast("Nenhuma apólice com esta corretora.");return}
+  const d0=docs[0];const r=corrReg(d0.corretor,d0.corretor_cnpj)||{};
+  const meses=[...new Set(docs.map(d=>d.competencia).filter(Boolean))].sort().reverse();
+  const mes=opts.mes&&meses.includes(opts.mes)?opts.mes:(meses.includes(S.month)?S.month:meses[0]);
+  S.dem={modo:"corretor",todos:docs,per:opts.per||"mes",mes,meses,nome:opts.nome||d0.corretor||"",cnpj:opts.cnpj||d0.corretor_cnpj||r.cnpj||"",regId:r.id||null,
+    rep:r.representante||"",pix:r.pix||"",adiant:"",local:lsGet("demLocal")||"Salvador",data:isoDay(today),voltar:opts.voltar||null,itens:[],sel:new Set()};
+  renderDem();
+}
+function crItens(){const D=S.dem;const l=D.per==="mes"?D.todos.filter(d=>d.competencia===D.mes):D.todos;
+  return l.slice().sort((a,b)=>String(a.vencimento||a.competencia||"").localeCompare(String(b.vencimento||b.competencia||""))||String(a.apolice).localeCompare(String(b.apolice))||a.parcela_num-b.parcela_num)}
+function crTotais(it){const pg=it.filter(d=>dirDe(d)==="pagar"),rc=it.filter(d=>dirDe(d)==="receber");
+  const soma=l=>r2(l.reduce((s,d)=>s+(Number(d.valor_repasse)||0),0));
+  const P={n:pg.length,total:soma(pg),pago:soma(pg.filter(d=>d.pago)),nPago:pg.filter(d=>d.pago).length};P.saldo=r2(P.total-P.pago);
+  const R={n:rc.length,total:soma(rc),pago:soma(rc.filter(d=>d.pago)),nPago:rc.filter(d=>d.pago).length};R.saldo=r2(R.total-R.pago);
+  return {P,R,liq:r2(P.saldo-R.saldo),comCorr:r2(it.reduce((s,d)=>s+parteCorretor(d),0))}}
+function renderExtratoCorr(){
+  const D=S.dem;D.itens=crItens();const it=D.itens;const T=crTotais(it);
+  const chipSit=sit=>`<span class="chip ${sit==="A vencer"?"s-apagar":sit==="Em atraso"?"s-atrasado":sit==="Fluxo direto"?"s-direto":"s-pago"}">${sit}</span>`;
+  const porAp=new Map();it.forEach(d=>{(porAp.get(d.id)||porAp.set(d.id,[]).get(d.id)).push(d)});
+  $("panelRoot").innerHTML=`<div class="scrim" data-action="demClose"></div>
+  <aside class="panel dem" role="dialog" aria-modal="true" aria-labelledby="demT">
+    <div class="p-head">${D.voltar?`<button class="iconbtn" data-action="demClose" aria-label="Voltar">←</button>`:""}<h2 id="demT">Extrato do corretor</h2><button class="iconbtn" data-action="demFechar" aria-label="Fechar">✕</button></div>
+    <div class="p-body">
+      <div class="dem-corr"><b>${esc(MAI(D.nome||"Corretora sem nome"))}</b>${D.cnpj?`<span class="num">CNPJ ${esc(fmtCnpj(D.cnpj))}</span>`:`<span class="warn-txt">sem CNPJ: preencha na ficha da corretora</span>`}</div>
+      <div class="cr-per" role="radiogroup" aria-label="Período">
+        <label class="cr-op${D.per==="mes"?" on":""}"><input type="radio" name="crPer" value="mes"${D.per==="mes"?" checked":""}> Do mês
+          <select id="crMes" aria-label="Mês"${D.per!=="mes"?" disabled":""}>${D.meses.map(m=>`<option value="${m}"${m===D.mes?" selected":""}>${esc(monthName(m))}</option>`).join("")}</select></label>
+        <label class="cr-op${D.per==="total"?" on":""}"><input type="radio" name="crPer" value="total"${D.per==="total"?" checked":""}> Total <small>todas as apólices e parcelas</small></label>
+      </div>
+      ${it.length?`<div class="dem-list ap-list">${[...porAp.values()].map(ps=>{const a=ps[0];return `<div class="cr-ap"><b class="num">${esc(a.apolice||"s/ nº")}</b><small>${esc(a.tomador||"—")}${a.seguradora?" · "+esc(a.seguradora):""}${dirDe(a)==="receber"?" · corretor é o líder":""}</small></div>
+        ${ps.map(d=>{const sit=sitParcela(d);return `<div class="dem-it ap-it"><span class="di-a"><b class="num">${d.parcela_num}/${d.parcelas_total}</b><small>${d.vencimento?"venc. "+esc(dateBR(d.vencimento)):"sem vencimento"}</small></span>
+          <span class="di-c">${chipSit(dirDe(d)==="receber"&&sit==="Recebido"?"Repassado":sit)}${d.pago&&d.data_pagamento?`<small class="num">em ${esc(dateBR(d.data_pagamento))}</small>`:""}</span>
+          <b class="di-v num ${dirDe(d)==="receber"?"in":""}">${money(d.valor_repasse)}</b></div>`}).join("")}`}).join("")}</div>`
+        :`<p class="meta">Nenhuma parcela neste período.</p>`}
+      <div class="dem-tot">${T.P.n?`<div><span>Comissão do corretor (${T.P.n} parcela${T.P.n>1?"s":""})</span><b class="num">${money(T.P.total)}</b></div><div><span>Pago (${T.P.nPago} de ${T.P.n})</span><b class="num">${money(T.P.pago)}</b></div><div class="saldo"><span>Saldo a pagar ao corretor</span><b class="num">${money(T.P.saldo)}</b></div>`:""}
+        ${T.R.n?`<div><span>Repasse ao Clube (${T.R.n} parcela${T.R.n>1?"s":""})</span><b class="num">${money(T.R.total)}</b></div><div><span>Repassado (${T.R.nPago} de ${T.R.n})</span><b class="num">${money(T.R.pago)}</b></div><div class="saldo"><span>Saldo a repassar ao Clube</span><b class="num">${money(T.R.saldo)}</b></div>`:""}</div>
+      <fieldset class="dem-f"><legend>Dados do destinatário do crédito</legend>
+        <div class="f"><label for="dem_rep">Representante legal</label><input id="dem_rep" value="${esc(D.rep)}" placeholder="Nome do representante"></div>
+        <div class="f"><label for="dem_pix">PIX do corretor</label><input id="dem_pix" value="${esc(D.pix)}" placeholder="Chave PIX (pode ficar em branco)"></div>
+        <div class="f"><label for="dem_local">Local</label><input id="dem_local" value="${esc(D.local)}"></div>
+        <div class="f"><label for="dem_data">Data</label><input id="dem_data" type="date" value="${esc(D.data)}"></div>
+      </fieldset>
+      <p class="meta">O extrato vai para o corretor e mostra a comissão dele em cada apólice: parcelas pagas (com a data), a vencer e em atraso.</p>
+    </div>
+    <div class="p-foot"><span class="meta">${it.length} parcela${it.length!==1?"s":""} · ${porAp.size} apólice${porAp.size!==1?"s":""}</span><span class="spacer"></span><button class="btn" data-action="crXlsx"${it.length?"":" disabled"}>Baixar Excel</button><button class="btn primary" data-action="crPdf"${it.length?"":" disabled"}>Baixar PDF</button></div>
+  </aside>`;
+}
+function crDados(){
+  demLer();const D=S.dem;if(!D.data){toast("Informe a data.");return null}const it=crItens();if(!it.length){toast("Nenhuma parcela neste período.");return null}
+  const T=crTotais(it);const [a,m,d]=D.data.split("-");const curto=nomeCurtoDem(D.nome);lsSet("demLocal",D.local||"");
+  const limpa=x=>String(x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9-]+/g,"_");
+  const per=D.per==="mes"?monthName(D.mes):"Todas as apólices";const temR=T.R.n>0;
+  const deveClube=T.liq>=0;
+  return {T,temR,nome:D.nome,cnpj:D.cnpj?fmtCnpj(D.cnpj):"",rep:D.rep.trim(),pix:D.pix.trim(),local:(D.local||"").trim(),dataBR:`${d}/${m}/${a}`,per,
+    destNome:deveClube?D.nome:EMIS.nome,destCnpj:deveClube?(D.cnpj?fmtCnpj(D.cnpj):""):EMIS.cnpj,destCorr:deveClube,
+    titulo:`Extrato do Corretor · ${curto}`,arquivo:`Extrato_Corretor_${limpa(curto)}_${D.per==="mes"?D.mes.replace("-",""):"total"}_${d}${m}${a}`,
+    linhas:it.map(x=>{const rec=dirDe(x)==="receber";const s=sitParcela(x);return {apolice:x.apolice||"",parcela:`${x.parcela_num}/${x.parcelas_total}`,cliente:x.tomador||"",venc:x.vencimento?dateBR(x.vencimento):"",
+      premio:Number(x.premio)||0,vcorr:parteCorretor(x),vclube:rec?r2(x.valor_repasse):null,sit:rec&&s==="Recebido"?"Repassado":s,pag:x.pago&&x.data_pagamento?dateBR(x.data_pagamento):""}})};
+}
+function crCab(X){return ["Apólice","Parcela","Cliente","Vencimento","Prêmio da Parcela","Comissão do Corretor",...(X.temR?["Repasse ao Clube"]:[]),"Situação","Data do Pagamento"]}
+function crLinha(X,l){return [l.apolice,l.parcela,l.cliente,l.venc,l.premio,l.vcorr,...(X.temR?[l.vclube==null?"—":l.vclube]:[]),l.sit,l.pag||"—"]}
+function crTotLinhas(X){const T=X.T;const o=[];
+  if(T.P.n){o.push(["Total da comissão do corretor",T.P.total],[`Pago (${T.P.nPago} de ${T.P.n})`,-T.P.pago],["Saldo a pagar ao corretor",T.P.saldo,1])}
+  if(T.R.n){o.push(["Total a repassar ao Clube",T.R.total],[`Repassado (${T.R.nPago} de ${T.R.n})`,-T.R.pago],["Saldo a repassar ao Clube",T.R.saldo,1])}
+  if(T.P.n&&T.R.n)o.push([T.liq>=0?"Saldo líquido a pagar ao corretor":"Saldo líquido a repassar ao Clube",Math.abs(T.liq),1]);
+  return o}
+async function crPdf(btn){
+  const X=crDados();if(!X)return;btn.disabled=true;
+  try{await loadPDF()}catch(_){btn.disabled=false;toast("Não foi possível carregar o gerador de PDF. Verifique a conexão.");return}
+  let logo=null;try{logo=await logoData()}catch(_){}
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+  const W=297,H=210,M=12,CW=W-2*M,col2=M+CW*0.62;
+  const barra=(y,t)=>{doc.setFillColor(...COR.navy);doc.rect(M,y,CW,6,"F");doc.setFont("helvetica","bold");doc.setFontSize(9);doc.setTextColor(255);doc.text(t,W/2,y+4.1,{align:"center"});doc.setTextColor(0);doc.setFont("helvetica","normal")};
+  const caixa=(x,y,w,h,t,al)=>{doc.setFillColor(...COR.gray);doc.rect(x,y,w,h,"F");if(t){doc.setFontSize(9);let s=String(t);while(s.length>4&&doc.getTextWidth(s)>w-3)s=s.slice(0,-2).trimEnd()+"…";doc.text(s,al==="right"?x+w-1.5:al==="center"?x+w/2:x+1.5,y+h-1.8,{align:al||"left"})}};
+  const ouro=y=>{doc.setDrawColor(...COR.gold);doc.setLineWidth(0.6);doc.line(M,y,W-M,y)};
+  if(logo)doc.addImage(logo,"PNG",M,8,76,21.3);
+  doc.setFont("helvetica","bold");doc.setFontSize(14);doc.text(X.titulo,(M+80+W-M)/2,18,{align:"center",maxWidth:W-M-(M+84)});
+  doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text(X.per,(M+80+W-M)/2,24,{align:"center"});
+  doc.setFontSize(9);doc.setTextColor(90);doc.text(`Posição em ${X.dataBR}`,(M+80+W-M)/2,29,{align:"center"});doc.setTextColor(0);
+  let y=34;barra(y,"Dados do Corretor");y+=6;
+  doc.setFontSize(9);doc.text("Nome | Razão Social",M+1,y+4.2);doc.text("CNPJ | CPF",col2+1,y+4.2);y+=5.5;
+  caixa(M,y,col2-M-1.5,5.6,X.nome);caixa(col2,y,W-M-col2,5.6,X.cnpj,"right");y+=6.3;ouro(y);y+=0.8;
+  const cab=crCab(X);const nums=X.temR?[4,5,6]:[4,5];const iSit=X.temR?7:6;const many=X.linhas.length>14;
+  doc.autoTable({startY:y,margin:{left:M,right:M},theme:"plain",
+    head:[cab],body:X.linhas.map(l=>crLinha(X,l).map((v,i)=>nums.includes(i)&&typeof v==="number"?num2(v):v)),
+    styles:{font:"helvetica",fontSize:many?8.5:9,cellPadding:{top:many?0.8:1.2,bottom:many?0.8:1.2,left:1.4,right:1.4},textColor:0,overflow:"ellipsize"},
+    headStyles:{fontStyle:"normal",halign:"center",valign:"bottom",fillColor:false,overflow:"linebreak"},
+    bodyStyles:{fillColor:COR.gray,lineColor:[255,255,255],lineWidth:0.7},
+    columnStyles:Object.fromEntries(cab.map((_,i)=>[i,i===2?{halign:"left",cellWidth:"auto"}:{halign:nums.includes(i)?"right":"center"}])),
+    didParseCell:h=>{if(h.section==="body"&&h.column.index===iSit){const v=String(h.cell.raw);if(v==="Em atraso")h.cell.styles.textColor=[176,38,30];else if(v!=="A vencer")h.cell.styles.textColor=[8,98,86]}
+      if(h.section==="body"&&h.column.index===5)h.cell.styles.fontStyle="bold"}});
+  y=doc.lastAutoTable.finalY+0.6;ouro(y);
+  const TL=crTotLinhas(X);
+  if(y+TL.length*5.5+40>H-6){doc.addPage();y=M}
+  const xl=W-M-34-4,xv=W-M-2;y+=5;
+  TL.forEach(([t,v,b])=>{doc.setFont("helvetica",b?"bold":"normal");doc.text(t,xl,y,{align:"right"});doc.text(v<0?"-"+num2(-v):num2(v),xv,y,{align:"right"});y+=5.5});doc.setFont("helvetica","normal");
+  y+=0.5;barra(y,"Dados do destinatário do crédito");y+=6;
+  const c4=M+CW*0.45;
+  {const ws=[0.36,0.2,0.24,0.2].map(f=>CW*f);let x=M;const xs=ws.map(w=>{const v=x;x+=w;return v});
+    doc.setFontSize(9);["Nome | Razão Social","CNPJ","Representante Legal","PIX"].forEach((l,i)=>doc.text(l,xs[i]+1,y+4.2));y+=5.5;
+    [X.destNome,X.destCnpj,X.destCorr?X.rep:"",X.destCorr?X.pix:""].forEach((v,i)=>caixa(xs[i],y,ws[i]-1.5,5.6,v));y+=6.6}
+  doc.text("Local e Data",M+1,y+4.2);doc.text("Assinatura",c4+1,y+4.2);y+=5.5;
+  caixa(M,y,c4-M-1.5,12,[X.local,X.dataBR].filter(Boolean).join(", "));caixa(c4,y,W-M-c4,12,"");y+=12.7;ouro(y);
+  doc.save(X.arquivo+".pdf");btn.disabled=false;demGuardar();toast("Extrato baixado. Confira e envie ao corretor.");
+}
+async function crXlsx(btn){
+  const X=crDados();if(!X)return;btn.disabled=true;
+  try{await loadXLS()}catch(_){btn.disabled=false;toast("Não foi possível carregar o gerador de Excel. Verifique a conexão.");return}
+  let logo=null;try{logo=await logoData()}catch(_){}
+  const wb=new ExcelJS.Workbook();wb.creator="Clube do Seguro Garantia";
+  const ws=wb.addWorksheet("Extrato",{views:[{showGridLines:false}],pageSetup:{paperSize:9,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.4,right:.4,top:.5,bottom:.5,header:.2,footer:.2}}});
+  const cab=crCab(X);const NC=cab.length;const L=n=>String.fromCharCode(64+n);const LC=L(NC);const nums=X.temR?[4,5,6]:[4,5];const iSit=X.temR?7:6;
+  ws.columns=(X.temR?[16,9,36,12,16,18,16,13,16]:[16,9,40,12,17,19,13,17]).map(width=>({width}));
+  const hex=c=>"FF"+c.map(v=>v.toString(16).padStart(2,"0")).join("").toUpperCase();
+  const fill=c=>({type:"pattern",pattern:"solid",fgColor:{argb:hex(c)}});
+  const branco={style:"thin",color:{argb:"FFFFFFFF"}};const ouroB={style:"medium",color:{argb:hex(COR.gold)}};
+  const fnt={name:"Calibri",size:11};
+  if(logo){const id=wb.addImage({base64:logo,extension:"png"});ws.addImage(id,{tl:{col:0,row:0},ext:{width:300,height:84},editAs:"oneCell"})}
+  for(let r=1;r<=5;r++)ws.getRow(r).height=17;
+  ws.mergeCells(`D2:${LC}3`);const t=ws.getCell("D2");t.value=X.titulo;t.font={name:"Arial",size:14,bold:true};t.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+  ws.mergeCells(`D4:${LC}4`);const t2=ws.getCell("D4");t2.value=`${X.per} · posição em ${X.dataBR}`;t2.font={...fnt,color:{argb:"FF5A5A5A"}};t2.alignment={horizontal:"center"};
+  const barra=(r,txt)=>{ws.mergeCells(`A${r}:${LC}${r}`);const c=ws.getCell(`A${r}`);c.value=txt;c.fill=fill(COR.navy);c.font={...fnt,bold:true,color:{argb:"FFFFFFFF"}};c.alignment={horizontal:"center"}};
+  const cel=(ref,v,o)=>{const c=ws.getCell(ref);c.value=v;c.font=fnt;Object.assign(c,o||{});return c};
+  const merge=(a,b,r)=>{if(a!==b)ws.mergeCells(`${a}${r}:${b}${r}`)};
+  const linhaOuro=r=>{for(let c=1;c<=NC;c++){const x=ws.getRow(r).getCell(c);x.border={...(x.border||{}),bottom:ouroB}}};
+  const meio=L(Math.ceil(NC/2)),apos=L(Math.ceil(NC/2)+1);
+  let r=6;barra(r,"Dados do Corretor");r++;
+  merge("A",meio,r);cel(`A${r}`,"Nome | Razão Social");merge(apos,LC,r);cel(`${apos}${r}`,"CNPJ | CPF");r++;
+  merge("A",meio,r);cel(`A${r}`,X.nome,{fill:fill(COR.gray)});merge(apos,LC,r);cel(`${apos}${r}`,X.cnpj,{fill:fill(COR.gray),alignment:{horizontal:"right"}});linhaOuro(r);r++;
+  cab.forEach((h,i)=>{const c=ws.getRow(r).getCell(i+1);c.value=h;c.font=fnt;c.alignment={horizontal:"center",wrapText:true}});r++;
+  X.linhas.forEach(l=>{const row=ws.getRow(r);crLinha(X,l).forEach((v,i)=>{const c=row.getCell(i+1);c.value=v;c.font=fnt;c.fill=fill(COR.gray);c.border={top:branco,left:branco,bottom:branco,right:branco};
+      const isNum=nums.includes(i)&&typeof v==="number";c.alignment={horizontal:i===2?"left":isNum?"right":"center"};if(isNum)c.numFmt="#,##0.00";if(i===5)c.font={...fnt,bold:true};
+      if(i===iSit&&v==="Em atraso")c.font={...fnt,color:{argb:"FFB0261E"}};else if(i===iSit&&v!=="A vencer")c.font={...fnt,color:{argb:"FF086256"}}});r++});
+  linhaOuro(r-1);
+  const lab=L(NC-1);
+  crTotLinhas(X).forEach(([tx,v,b])=>{cel(`${lab}${r}`,tx,{alignment:{horizontal:"right"},font:{...fnt,bold:!!b}});cel(`${LC}${r}`,v,{numFmt:"#,##0.00",font:{...fnt,bold:!!b}});r++});
+  barra(r,"Dados do destinatário do crédito");r++;
+  merge("A",meio,r);cel(`A${r}`,"Nome | Razão Social");merge(apos,LC,r);cel(`${apos}${r}`,"CNPJ");r++;
+  merge("A",meio,r);cel(`A${r}`,X.destNome,{fill:fill(COR.gray)});merge(apos,LC,r);cel(`${apos}${r}`,X.destCnpj,{fill:fill(COR.gray)});r++;
+  merge("A",meio,r);cel(`A${r}`,"Representante Legal");merge(apos,LC,r);cel(`${apos}${r}`,"PIX");r++;
+  merge("A",meio,r);cel(`A${r}`,X.destCorr?X.rep:"",{fill:fill(COR.gray)});merge(apos,LC,r);cel(`${apos}${r}`,X.destCorr?X.pix:"",{fill:fill(COR.gray)});r++;
+  merge("A","C",r);cel(`A${r}`,"Local e Data");merge("D",LC,r);cel(`D${r}`,"Assinatura");r++;
+  ws.getRow(r).height=32;merge("A","C",r);cel(`A${r}`,[X.local,X.dataBR].filter(Boolean).join(", "),{fill:fill(COR.gray),alignment:{vertical:"bottom"}});merge("D",LC,r);cel(`D${r}`,"",{fill:fill(COR.gray)});linhaOuro(r);
+  ws.pageSetup.printArea=`A1:${LC}${r}`;
+  const buf=await wb.xlsx.writeBuffer();baixarBlob(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),X.arquivo+".xlsx");
+  btn.disabled=false;demGuardar();toast("Excel baixado.");
 }
 
 // ---------------- relatório do mês para baixar (PDF e Excel com a identidade do Clube) ----------------
@@ -1773,7 +1925,7 @@ function renderFicha(){
     <div class="p-body">
       <dl class="fi-dados"><div><dt>CNPJ</dt><dd class="num">${x.cnpj?esc(fmtCnpj(x.cnpj)):'<span class="warn-txt">não informado</span>'}</dd></div><div><dt>Código SUSEP</dt><dd class="num">${esc(x.susep||"—")}</dd></div><div><dt>Apólices</dt><dd class="num">${r.apolices}</dd></div></dl>
       <div class="cd-tot"><div class="out"><span>A pagar em aberto</span><b class="num">${money(r.pagar)}</b></div><div class="in"><span>A receber em aberto</span><b class="num">${money(r.receber)}</b></div></div>
-      <div class="fi-acts"><button class="btn small" data-action="cEditFicha" data-id="${esc(x.id)}">Editar dados</button>${pag.length?`<button class="btn small" data-action="fichaDem">Demonstrativo</button>`:""}</div>
+      <div class="fi-acts"><button class="btn small" data-action="cEditFicha" data-id="${esc(x.id)}">Editar dados</button>${pag.length?`<button class="btn small" data-action="fichaDem">Demonstrativo</button>`:""}${r.docs.length?`<button class="btn small" data-action="fichaExtrato">Extrato</button>`:""}</div>
       <section><h3 class="fi-h">Apólices</h3>${aps.length?`<ul class="fi-list">${aps.map(linhaAp).join("")}</ul>`:'<p class="meta">Nenhuma apólice lançada com esta corretora.</p>'}</section>
     </div></aside>`;
 }
@@ -2269,6 +2421,10 @@ document.addEventListener("click",ev=>{
     case "apExtrato":if(S.editing&&S.editing.id){const id=S.editing.id;closePanel(false,true);openExtratoAp(id,{voltar:"apolice"})}break;
     case "apExtratoUlt":$("toastRoot").innerHTML="";if(S.ultimaAp)openExtratoAp(S.ultimaAp);break;
     case "apPdf":apPdf(t);break;
+    case "crPdf":crPdf(t);break;
+    case "crXlsx":crXlsx(t);break;
+    case "fichaExtrato":{const x=S.corretoras.find(c=>c.id===S.ficha);if(x)openExtratoCorr(resumoCorretora(x).docs,{nome:x.nome,cnpj:x.cnpj,voltar:"ficha"});break}
+    case "repExtrato":{const g0=S.docs.find(d=>grupoKey(d)===t.dataset.k);if(g0){const ck=corrKey(g0);openExtratoCorr(S.docs.filter(d=>corrKey(d)===ck),{mes:S.month})}break}
     case "apXlsx":apXlsx(t);break;
     case "demXlsx":demXlsx(t);break;
     case "extrato":openExtrato();break;
@@ -2358,6 +2514,7 @@ document.addEventListener("change",ev=>{
   if(ev.target.name==="uModo"&&S.cfgU&&S.cfgU.form){readUForm();renderConfig($("page"));return}
   if(ev.target.dataset&&ev.target.dataset.dsel!=null&&S.dem){const k=ev.target.dataset.dsel;if(ev.target.checked)S.dem.sel.add(k);else S.dem.sel.delete(k);renderDemTot();return}
   if(id==="extFile"){const f=ev.target.files&&ev.target.files[0];ev.target.value="";if(f)lerExtrato(f);return}
+  if(S.dem&&S.dem.modo==="corretor"&&(ev.target.name==="crPer"||id==="crMes")){demLer();if(ev.target.name==="crPer")S.dem.per=ev.target.value;else S.dem.mes=ev.target.value;renderExtratoCorr();return}
   if(!S.editing)return;const d=S.editing.data;
   if(id==="fileInput"){uploadFiles(ev.target.files);ev.target.value="";return}
   if(ev.target.dataset&&ev.target.dataset.cat!=null){const a=d.anexos[+ev.target.dataset.cat];if(a){a.categoria=ev.target.value;a.dirty=true}return}
