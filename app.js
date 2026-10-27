@@ -1245,7 +1245,9 @@ function openDem(itens,opts){
   const d0=itens[0];const r=corrReg(d0.corretor,d0.corretor_cnpj)||{};
   itens=itens.slice().sort((a,b)=>String(a.vencimento||a.competencia||"").localeCompare(String(b.vencimento||b.competencia||""))||String(a.apolice).localeCompare(String(b.apolice))||a.parcela_num-b.parcela_num);
   S.dem={itens,sel:new Set(itens.map(dKey)),nome:d0.corretor||"",cnpj:d0.corretor_cnpj||r.cnpj||"",regId:r.id||null,rep:r.representante||"",pix:r.pix||"",
-    adiant:"",local:lsGet("demLocal")||"Salvador",data:isoDay(today),voltar:opts.voltar||null,titulo:opts.titulo||""};
+    adiant:"",local:lsGet("demLocal")||"Salvador",data:isoDay(today),voltar:opts.voltar||null,titulo:opts.titulo||"",
+    base:itens,mo:"abertas",de:ym(today)+"-01",ate:isoDay(today),
+    todosPg:S.docs.filter(d=>corrKey(d)===corrKey(d0)&&dirDe(d)==="pagar")};
   renderDem();
 }
 function demSel(){const D=S.dem;return D?D.itens.filter(d=>D.sel.has(dKey(d))):[]}
@@ -1256,18 +1258,35 @@ function renderDemTot(){const T=demTotais();const el=$("demTot");if(!el)return;
   el.innerHTML=`<div><span>Total do repasse</span><b class="num">${money(T.total)}</b></div>${T.adi?`<div><span>Adiantamento</span><b class="num">− ${money(T.adi)}</b></div>`:""}<div class="saldo"><span>Saldo a repassar</span><b class="num">${money(T.saldo)}</b></div>`;
   const n=$("demN");if(n)n.textContent=`${T.it.length} de ${S.dem.itens.length} parcela${S.dem.itens.length>1?"s":""}`;
   document.querySelectorAll("[data-action='demPdf'],[data-action='demXlsx']").forEach(b=>b.disabled=!T.it.length)}
+// demonstrativo: "a pagar" (lista de origem) ou "pagas entre as datas" (pela data do pagamento, de qualquer apólice)
+function demPagasOk(){const D=S.dem;return D.de&&D.ate&&D.de<=D.ate}
+function demAplicarModo(){const D=S.dem;
+  if(D.mo==="pagas"){D.itens=demPagasOk()?D.todosPg.filter(d=>d.pago&&d.pago_por!==DIRETO&&d.data_pagamento&&String(d.data_pagamento).slice(0,10)>=D.de&&String(d.data_pagamento).slice(0,10)<=D.ate)
+      .sort((a,b)=>String(a.data_pagamento).localeCompare(String(b.data_pagamento))||String(a.apolice).localeCompare(String(b.apolice))||a.parcela_num-b.parcela_num):[]}
+  else D.itens=D.base;
+  D.sel=new Set(D.itens.map(dKey))}
+function demListaHTML(){const D=S.dem;
+  if(D.mo==="pagas"&&!demPagasOk())return `<p class="warn-txt">${D.de&&D.ate?"A data inicial é depois da data final.":"Informe as duas datas."}</p>`;
+  if(!D.itens.length)return `<p class="meta">${D.mo==="pagas"?"Nenhuma parcela paga a este corretor nesse período. Confira se os pagamentos foram marcados como pagos, com a data.":"Nenhuma parcela."}</p>`;
+  return `<div class="dem-list" role="group" aria-label="Parcelas no demonstrativo">${D.itens.map(d=>`<label class="dem-it">
+        <input type="checkbox" data-dsel="${esc(dKey(d))}"${D.sel.has(dKey(d))?" checked":""}>
+        <span class="di-a"><b class="num">${esc(d.apolice||"s/ nº")}</b>${d.parcelas_total>1?` <span class="pc">${d.parcela_num}/${d.parcelas_total}</span>`:""}<small>${esc(d.tomador||"—")}${d.vencimento&&D.mo!=="pagas"?` · venc. ${esc(dateBR(d.vencimento))}`:""}${d.pago?` · <span class="ok-txt">${d.data_pagamento?"pago em "+esc(dateBR(d.data_pagamento)):"já pago"}</span>`:""}</small></span>
+        <span class="di-c num"><small>${d.comissao_pct!=null?esc(pctFmt(d.comissao_pct))+" de "+esc(money(d.premio)):"sem comissão"}</small><small>repasse ${esc(pctFmt(d.repasse_pct))}</small></span>
+        <b class="di-v num">${money(d.valor_repasse)}</b></label>`).join("")}</div>`}
+function demAtualizar(){demAplicarModo();const c=$("demLista");if(c)c.innerHTML=demListaHTML();renderDemTot()}
 function renderDem(){
   const D=S.dem;if(!D)return;if(D.modo==="apolice"){renderExtratoAp();return}if(D.modo==="corretor"){renderExtratoCorr();return}
   $("panelRoot").innerHTML=`<div class="scrim" data-action="demClose"></div>
   <aside class="panel dem" role="dialog" aria-modal="true" aria-labelledby="demT">
     <div class="p-head">${D.voltar?`<button class="iconbtn" data-action="demClose" aria-label="${D.voltar==="ficha"?"Voltar à corretora":"Voltar ao extrato"}">←</button>`:""}<h2 id="demT">Demonstrativo de pagamento</h2><button class="iconbtn" data-action="demFechar" aria-label="Fechar">✕</button></div>
     <div class="p-body">
-      <div class="dem-corr"><b>${esc(D.nome||"Corretora sem nome")}</b>${D.cnpj?`<span class="num">CNPJ ${esc(fmtCnpj(D.cnpj))}</span>`:`<span class="warn-txt">sem CNPJ</span>`}${D.titulo?`<span class="meta">${esc(D.titulo)}</span>`:""}</div>
-      <div class="dem-list" role="group" aria-label="Parcelas no demonstrativo">${D.itens.map(d=>`<label class="dem-it">
-        <input type="checkbox" data-dsel="${esc(dKey(d))}"${D.sel.has(dKey(d))?" checked":""}>
-        <span class="di-a"><b class="num">${esc(d.apolice||"s/ nº")}</b>${d.parcelas_total>1?` <span class="pc">${d.parcela_num}/${d.parcelas_total}</span>`:""}<small>${esc(d.tomador||"—")}${d.vencimento?` · venc. ${esc(dateBR(d.vencimento))}`:""}${d.pago?` · <span class="ok-txt">já pago</span>`:""}</small></span>
-        <span class="di-c num"><small>${d.comissao_pct!=null?esc(pctFmt(d.comissao_pct))+" de "+esc(money(d.premio)):"sem comissão"}</small><small>repasse ${esc(pctFmt(d.repasse_pct))}</small></span>
-        <b class="di-v num">${money(d.valor_repasse)}</b></label>`).join("")}</div>
+      <div class="dem-corr"><b>${esc(D.nome||"Corretora sem nome")}</b>${D.cnpj?`<span class="num">CNPJ ${esc(fmtCnpj(D.cnpj))}</span>`:`<span class="warn-txt">sem CNPJ</span>`}</div>
+      <div class="cr-per" role="radiogroup" aria-label="Quais parcelas">
+        <label class="cr-op${D.mo!=="pagas"?" on":""}"><input type="radio" name="demMo" value="abertas"${D.mo!=="pagas"?" checked":""}> A pagar <small>${esc(D.titulo||"parcelas desta tela")}</small></label>
+        <label class="cr-op${D.mo==="pagas"?" on":""}"><input type="radio" name="demMo" value="pagas"${D.mo==="pagas"?" checked":""}> Já pagas <small>pela data do pagamento, de qualquer apólice</small></label>
+        ${D.mo==="pagas"?`<div class="cr-op cr-pd on"><span class="cr-datas">Pagas de <input type="date" id="demDe" aria-label="Data inicial do pagamento" value="${esc(D.de)}"> até <input type="date" id="demAte" aria-label="Data final do pagamento" value="${esc(D.ate)}"></span><small>para um dia só, use a mesma data nos dois campos · clique no calendário ou digite</small></div>`:""}
+      </div>
+      <div id="demLista">${demListaHTML()}</div>
       <div class="dem-tot" id="demTot"></div>
       <fieldset class="dem-f"><legend>Dados do destinatário do crédito</legend>
         <div class="f"><label for="dem_rep">Representante legal</label><input id="dem_rep" value="${esc(D.rep)}" placeholder="Nome do representante"></div>
@@ -1288,8 +1307,9 @@ function demDados(){
   demLer();const D=S.dem;const T=demTotais();if(!T.it.length){toast("Marque pelo menos uma parcela.");return null}
   if(!D.data){toast("Informe a data.");return null}
   const [a,m,d]=D.data.split("-");const curto=nomeCurtoDem(D.nome);
+  const perPg=D.mo==="pagas"?(D.de===D.ate?`Pagamento de ${dateBR(D.de)}`:`Pagamentos de ${dateBR(D.de)} a ${dateBR(D.ate)}`):"";
   lsSet("demLocal",D.local||"");
-  return {...T,nome:D.nome,cnpj:D.cnpj?fmtCnpj(D.cnpj):"",rep:D.rep.trim(),pix:D.pix.trim(),local:(D.local||"").trim(),dataBR:`${d}/${m}/${a}`,
+  return {...T,perPg,nome:D.nome,cnpj:D.cnpj?fmtCnpj(D.cnpj):"",rep:D.rep.trim(),pix:D.pix.trim(),local:(D.local||"").trim(),dataBR:`${d}/${m}/${a}`,
     titulo:`Demonstrativo de Pagamento ${curto} ${d}${m}${a}`,arquivo:`Demonstrativo_de_Pagamento_${curto.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Za-z0-9-]+/g,"_")}_${d}${m}${a}`,
     linhas:T.it.map(x=>({apolice:x.apolice||"",parcela:x.parcelas_total>1?`${x.parcela_num}/${x.parcelas_total}`:String(x.parcela_num||1),cliente:x.tomador||"",
       premio:Number(x.premio)||0,com:(Number(x.comissao_pct)||0)/100,vcom:comissaoDe(x),rep:(Number(x.repasse_pct)||0)/100,vrep:Number(x.valor_repasse)||0}))};
@@ -1313,7 +1333,8 @@ async function demPdf(btn){
   const caixa=(x,y,w,h,t,al)=>{doc.setFillColor(...COR.gray);doc.rect(x,y,w,h,"F");if(t){doc.setFontSize(9);doc.text(String(t),al==="right"?x+w-1.5:x+1.5,y+h-1.8,{align:al||"left",maxWidth:w-3})}};
   const ouro=y=>{doc.setDrawColor(...COR.gold);doc.setLineWidth(0.6);doc.line(M,y,W-M,y)};
   if(logo)doc.addImage(logo,"PNG",M,8,76,21.3);
-  doc.setFont("helvetica","bold");doc.setFontSize(14);doc.text(X.titulo,(M+80+W-M)/2,21,{align:"center",maxWidth:W-M-(M+84)});
+  doc.setFont("helvetica","bold");doc.setFontSize(14);doc.text(X.titulo,(M+80+W-M)/2,X.perPg?18:21,{align:"center",maxWidth:W-M-(M+84)});
+  if(X.perPg){doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text(X.perPg,(M+80+W-M)/2,25,{align:"center"})}
   let y=34;barra(y,"Dados do Corretor");y+=6;
   doc.setFontSize(9);doc.text("Nome | Razão Social",M+1,y+4.2);doc.text("CNPJ | CPF",col2+1,y+4.2);y+=5.5;
   caixa(M,y,col2-M-1.5,5.6,X.nome);caixa(col2,y,W-M-col2,5.6,X.cnpj,"right");y+=6.3;ouro(y);y+=0.8;
@@ -1351,7 +1372,7 @@ async function demXlsx(btn){
   const fnt={name:"Calibri",size:11};
   if(logo){const id=wb.addImage({base64:logo,extension:"png"});ws.addImage(id,{tl:{col:0,row:0},ext:{width:300,height:84},editAs:"oneCell"})}
   for(let r=1;r<=5;r++)ws.getRow(r).height=17;
-  ws.mergeCells("D2:H4");const t=ws.getCell("D2");t.value=X.titulo;t.font={name:"Arial",size:14,bold:true};t.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+  ws.mergeCells("D2:H4");const t=ws.getCell("D2");t.value=X.perPg?{richText:[{text:X.titulo+"\n",font:{name:"Arial",size:14,bold:true}},{text:X.perPg,font:{name:"Calibri",size:11}}]}:X.titulo;t.font={name:"Arial",size:14,bold:true};t.alignment={horizontal:"center",vertical:"middle",wrapText:true};
   const barra=(r,txt)=>{ws.mergeCells(`A${r}:H${r}`);const c=ws.getCell(`A${r}`);c.value=txt;c.fill=fill(COR.navy);c.font={...fnt,bold:true,color:{argb:"FFFFFFFF"}};c.alignment={horizontal:"center"}};
   const cel=(ref,v,o)=>{const c=ws.getCell(ref);c.value=v;c.font=fnt;Object.assign(c,o||{});return c};
   const linhaOuro=r=>{for(let c=1;c<=8;c++){const x=ws.getRow(r).getCell(c);x.border={...(x.border||{}),bottom:ouroB}}};
@@ -1545,21 +1566,38 @@ function openExtratoCorr(docs,opts){
   const d0=docs[0];const r=corrReg(d0.corretor,d0.corretor_cnpj)||{};
   const meses=[...new Set(docs.map(d=>d.competencia).filter(Boolean))].sort().reverse();
   const mes=opts.mes&&meses.includes(opts.mes)?opts.mes:(meses.includes(S.month)?S.month:meses[0]);
-  S.dem={modo:"corretor",todos:docs,per:opts.per||"mes",mes,meses,nome:opts.nome||d0.corretor||"",cnpj:opts.cnpj||d0.corretor_cnpj||r.cnpj||"",regId:r.id||null,
+  const fimMes=m=>{const [y,mm]=m.split("-").map(Number);return isoDay(new Date(y,mm,0))};
+  S.dem={modo:"corretor",todos:docs,per:opts.per||"mes",mes,meses,de:mes+"-01",ate:fimMes(mes),nome:opts.nome||d0.corretor||"",cnpj:opts.cnpj||d0.corretor_cnpj||r.cnpj||"",regId:r.id||null,
     rep:r.representante||"",pix:r.pix||"",adiant:"",local:lsGet("demLocal")||"Salvador",data:isoDay(today),voltar:opts.voltar||null,itens:[],sel:new Set()};
   renderDem();
 }
-function crItens(){const D=S.dem;const l=D.per==="mes"?D.todos.filter(d=>d.competencia===D.mes):D.todos;
+function crData(d){return String(d.vencimento||(d.competencia?d.competencia+"-01":"")).slice(0,10)}
+function crPerOk(){const D=S.dem;return D.per!=="periodo"||(D.de&&D.ate&&D.de<=D.ate)}
+function crItens(){const D=S.dem;const l=D.per==="mes"?D.todos.filter(d=>d.competencia===D.mes)
+    :D.per==="periodo"?(crPerOk()?D.todos.filter(d=>{const x=crData(d);return x&&x>=D.de&&x<=D.ate}):[]):D.todos;
   return l.slice().sort((a,b)=>String(a.vencimento||a.competencia||"").localeCompare(String(b.vencimento||b.competencia||""))||String(a.apolice).localeCompare(String(b.apolice))||a.parcela_num-b.parcela_num)}
 function crTotais(it){const pg=it.filter(d=>dirDe(d)==="pagar"),rc=it.filter(d=>dirDe(d)==="receber");
   const soma=l=>r2(l.reduce((s,d)=>s+(Number(d.valor_repasse)||0),0));
   const P={n:pg.length,total:soma(pg),pago:soma(pg.filter(d=>d.pago)),nPago:pg.filter(d=>d.pago).length};P.saldo=r2(P.total-P.pago);
   const R={n:rc.length,total:soma(rc),pago:soma(rc.filter(d=>d.pago)),nPago:rc.filter(d=>d.pago).length};R.saldo=r2(R.total-R.pago);
   return {P,R,liq:r2(P.saldo-R.saldo),comCorr:r2(it.reduce((s,d)=>s+parteCorretor(d),0))}}
-function renderExtratoCorr(){
-  const D=S.dem;D.itens=crItens();const it=D.itens;const T=crTotais(it);
+function crCorpoHTML(){const D=S.dem;const it=D.itens;const T=crTotais(it);
   const chipSit=sit=>`<span class="chip ${sit==="A vencer"?"s-apagar":sit==="Em atraso"?"s-atrasado":sit==="Fluxo direto"?"s-direto":"s-pago"}">${sit}</span>`;
   const porAp=new Map();it.forEach(d=>{(porAp.get(d.id)||porAp.set(d.id,[]).get(d.id)).push(d)});
+  if(!crPerOk())return `<p class="warn-txt">${D.de&&D.ate?"A data inicial é depois da data final.":"Informe as duas datas do período."}</p>`;
+  return `${it.length?`<div class="dem-list ap-list">${[...porAp.values()].map(ps=>{const a=ps[0];return `<div class="cr-ap"><b class="num">${esc(a.apolice||"s/ nº")}</b><small>${esc(a.tomador||"—")}${a.seguradora?" · "+esc(a.seguradora):""}${dirDe(a)==="receber"?" · corretor é o líder":""}</small></div>
+        ${ps.map(d=>{const sit=sitParcela(d);return `<div class="dem-it ap-it"><span class="di-a"><b class="num">${d.parcela_num}/${d.parcelas_total}</b><small>${d.vencimento?"venc. "+esc(dateBR(d.vencimento)):"sem vencimento"}</small></span>
+          <span class="di-c">${chipSit(dirDe(d)==="receber"&&sit==="Recebido"?"Repassado":sit)}${d.pago&&d.data_pagamento?`<small class="num">em ${esc(dateBR(d.data_pagamento))}</small>`:""}</span>
+          <b class="di-v num ${dirDe(d)==="receber"?"in":""}">${money(d.valor_repasse)}</b></div>`}).join("")}`}).join("")}</div>`
+        :`<p class="meta">Nenhuma parcela neste período.</p>`}
+      <div class="dem-tot">${T.P.n?`<div><span>Comissão do corretor (${T.P.n} parcela${T.P.n>1?"s":""})</span><b class="num">${money(T.P.total)}</b></div><div><span>Pago (${T.P.nPago} de ${T.P.n})</span><b class="num">${money(T.P.pago)}</b></div><div class="saldo"><span>Saldo a pagar ao corretor</span><b class="num">${money(T.P.saldo)}</b></div>`:""}
+        ${T.R.n?`<div><span>Repasse ao Clube (${T.R.n} parcela${T.R.n>1?"s":""})</span><b class="num">${money(T.R.total)}</b></div><div><span>Repassado (${T.R.nPago} de ${T.R.n})</span><b class="num">${money(T.R.pago)}</b></div><div class="saldo"><span>Saldo a repassar ao Clube</span><b class="num">${money(T.R.saldo)}</b></div>`:""}</div>`}
+function crFoot(){const it=S.dem.itens;const n=new Set(it.map(d=>d.id)).size;
+  const m=$("crN");if(m)m.textContent=`${it.length} parcela${it.length!==1?"s":""} · ${n} apólice${n!==1?"s":""}`;
+  document.querySelectorAll("[data-action='crPdf'],[data-action='crXlsx']").forEach(b=>b.disabled=!it.length)}
+function crAtualizar(){const D=S.dem;D.itens=crItens();const c=$("crCorpo");if(c)c.innerHTML=crCorpoHTML();crFoot()}
+function renderExtratoCorr(){
+  const D=S.dem;D.itens=crItens();const it=D.itens;const nAp=new Set(it.map(d=>d.id)).size;
   $("panelRoot").innerHTML=`<div class="scrim" data-action="demClose"></div>
   <aside class="panel dem" role="dialog" aria-modal="true" aria-labelledby="demT">
     <div class="p-head">${D.voltar?`<button class="iconbtn" data-action="demClose" aria-label="Voltar">←</button>`:""}<h2 id="demT">Extrato do corretor</h2><button class="iconbtn" data-action="demFechar" aria-label="Fechar">✕</button></div>
@@ -1569,14 +1607,11 @@ function renderExtratoCorr(){
         <label class="cr-op${D.per==="mes"?" on":""}"><input type="radio" name="crPer" value="mes"${D.per==="mes"?" checked":""}> Do mês
           <select id="crMes" aria-label="Mês"${D.per!=="mes"?" disabled":""}>${D.meses.map(m=>`<option value="${m}"${m===D.mes?" selected":""}>${esc(monthName(m))}</option>`).join("")}</select></label>
         <label class="cr-op${D.per==="total"?" on":""}"><input type="radio" name="crPer" value="total"${D.per==="total"?" checked":""}> Total <small>todas as apólices e parcelas</small></label>
+        <label class="cr-op cr-pd${D.per==="periodo"?" on":""}"><input type="radio" name="crPer" value="periodo"${D.per==="periodo"?" checked":""}> Período
+          <span class="cr-datas">de <input type="date" id="crDe" aria-label="Data inicial" value="${esc(D.de||"")}"${D.per!=="periodo"?" disabled":""}> até <input type="date" id="crAte" aria-label="Data final" value="${esc(D.ate||"")}"${D.per!=="periodo"?" disabled":""}></span>
+          <small>parcelas com vencimento entre as duas datas · clique no calendário ou digite</small></label>
       </div>
-      ${it.length?`<div class="dem-list ap-list">${[...porAp.values()].map(ps=>{const a=ps[0];return `<div class="cr-ap"><b class="num">${esc(a.apolice||"s/ nº")}</b><small>${esc(a.tomador||"—")}${a.seguradora?" · "+esc(a.seguradora):""}${dirDe(a)==="receber"?" · corretor é o líder":""}</small></div>
-        ${ps.map(d=>{const sit=sitParcela(d);return `<div class="dem-it ap-it"><span class="di-a"><b class="num">${d.parcela_num}/${d.parcelas_total}</b><small>${d.vencimento?"venc. "+esc(dateBR(d.vencimento)):"sem vencimento"}</small></span>
-          <span class="di-c">${chipSit(dirDe(d)==="receber"&&sit==="Recebido"?"Repassado":sit)}${d.pago&&d.data_pagamento?`<small class="num">em ${esc(dateBR(d.data_pagamento))}</small>`:""}</span>
-          <b class="di-v num ${dirDe(d)==="receber"?"in":""}">${money(d.valor_repasse)}</b></div>`}).join("")}`}).join("")}</div>`
-        :`<p class="meta">Nenhuma parcela neste período.</p>`}
-      <div class="dem-tot">${T.P.n?`<div><span>Comissão do corretor (${T.P.n} parcela${T.P.n>1?"s":""})</span><b class="num">${money(T.P.total)}</b></div><div><span>Pago (${T.P.nPago} de ${T.P.n})</span><b class="num">${money(T.P.pago)}</b></div><div class="saldo"><span>Saldo a pagar ao corretor</span><b class="num">${money(T.P.saldo)}</b></div>`:""}
-        ${T.R.n?`<div><span>Repasse ao Clube (${T.R.n} parcela${T.R.n>1?"s":""})</span><b class="num">${money(T.R.total)}</b></div><div><span>Repassado (${T.R.nPago} de ${T.R.n})</span><b class="num">${money(T.R.pago)}</b></div><div class="saldo"><span>Saldo a repassar ao Clube</span><b class="num">${money(T.R.saldo)}</b></div>`:""}</div>
+      <div id="crCorpo">${crCorpoHTML()}</div>
       <fieldset class="dem-f"><legend>Dados do destinatário do crédito</legend>
         <div class="f"><label for="dem_rep">Representante legal</label><input id="dem_rep" value="${esc(D.rep)}" placeholder="Nome do representante"></div>
         <div class="f"><label for="dem_pix">PIX do corretor</label><input id="dem_pix" value="${esc(D.pix)}" placeholder="Chave PIX (pode ficar em branco)"></div>
@@ -1585,18 +1620,19 @@ function renderExtratoCorr(){
       </fieldset>
       <p class="meta">O extrato vai para o corretor e mostra a comissão dele em cada apólice: parcelas pagas (com a data), a vencer e em atraso.</p>
     </div>
-    <div class="p-foot"><span class="meta">${it.length} parcela${it.length!==1?"s":""} · ${porAp.size} apólice${porAp.size!==1?"s":""}</span><span class="spacer"></span><button class="btn" data-action="crXlsx"${it.length?"":" disabled"}>Baixar Excel</button><button class="btn primary" data-action="crPdf"${it.length?"":" disabled"}>Baixar PDF</button></div>
+    <div class="p-foot"><span class="meta" id="crN">${it.length} parcela${it.length!==1?"s":""} · ${nAp} apólice${nAp!==1?"s":""}</span><span class="spacer"></span><button class="btn" data-action="crXlsx"${it.length?"":" disabled"}>Baixar Excel</button><button class="btn primary" data-action="crPdf"${it.length?"":" disabled"}>Baixar PDF</button></div>
   </aside>`;
 }
 function crDados(){
   demLer();const D=S.dem;if(!D.data){toast("Informe a data.");return null}const it=crItens();if(!it.length){toast("Nenhuma parcela neste período.");return null}
   const T=crTotais(it);const [a,m,d]=D.data.split("-");const curto=nomeCurtoDem(D.nome);lsSet("demLocal",D.local||"");
   const limpa=x=>String(x||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9-]+/g,"_");
-  const per=D.per==="mes"?monthName(D.mes):"Todas as apólices";const temR=T.R.n>0;
+  if(!crPerOk()){toast("Confira as datas do período.");return null}
+  const per=D.per==="mes"?monthName(D.mes):D.per==="periodo"?`Período de ${dateBR(D.de)} a ${dateBR(D.ate)}`:"Todas as apólices";const temR=T.R.n>0;
   const deveClube=T.liq>=0;
   return {T,temR,nome:D.nome,cnpj:D.cnpj?fmtCnpj(D.cnpj):"",rep:D.rep.trim(),pix:D.pix.trim(),local:(D.local||"").trim(),dataBR:`${d}/${m}/${a}`,per,
     destNome:deveClube?D.nome:EMIS.nome,destCnpj:deveClube?(D.cnpj?fmtCnpj(D.cnpj):""):EMIS.cnpj,destCorr:deveClube,
-    titulo:`Extrato do Corretor · ${curto}`,arquivo:`Extrato_Corretor_${limpa(curto)}_${D.per==="mes"?D.mes.replace("-",""):"total"}_${d}${m}${a}`,
+    titulo:`Extrato do Corretor · ${curto}`,arquivo:`Extrato_Corretor_${limpa(curto)}_${D.per==="mes"?D.mes.replace("-",""):D.per==="periodo"?D.de.replace(/-/g,"")+"-"+D.ate.replace(/-/g,""):"total"}_${d}${m}${a}`,
     linhas:it.map(x=>{const rec=dirDe(x)==="receber";const s=sitParcela(x);return {apolice:x.apolice||"",parcela:`${x.parcela_num}/${x.parcelas_total}`,cliente:x.tomador||"",venc:x.vencimento?dateBR(x.vencimento):"",
       premio:Number(x.premio)||0,vcorr:parteCorretor(x),vclube:rec?r2(x.valor_repasse):null,sit:rec&&s==="Recebido"?"Repassado":s,pag:x.pago&&x.data_pagamento?dateBR(x.data_pagamento):""}})};
 }
@@ -2518,8 +2554,11 @@ document.addEventListener("change",ev=>{
   if(ev.target.classList&&ev.target.classList.contains("dchk")){destToggle(ev.target);return}
   if(id==="avOn"){S.av.on=ev.target.checked;S.av.dirty=true;renderAvisos();return}
   if(ev.target.name==="uModo"&&S.cfgU&&S.cfgU.form){readUForm();renderConfig($("page"));return}
+  if(S.dem&&!S.dem.modo&&ev.target.name==="demMo"){demLer();S.dem.mo=ev.target.value;demAplicarModo();renderDem();return}
+  if(S.dem&&!S.dem.modo&&(id==="demDe"||id==="demAte")){S.dem[id==="demDe"?"de":"ate"]=ev.target.value;demAtualizar();return}
   if(ev.target.dataset&&ev.target.dataset.dsel!=null&&S.dem){const k=ev.target.dataset.dsel;if(ev.target.checked)S.dem.sel.add(k);else S.dem.sel.delete(k);renderDemTot();return}
   if(id==="extFile"){const f=ev.target.files&&ev.target.files[0];ev.target.value="";if(f)lerExtrato(f);return}
+  if(S.dem&&S.dem.modo==="corretor"&&(id==="crDe"||id==="crAte")){S.dem[id==="crDe"?"de":"ate"]=ev.target.value;crAtualizar();return}
   if(S.dem&&S.dem.modo==="corretor"&&(ev.target.name==="crPer"||id==="crMes")){demLer();if(ev.target.name==="crPer")S.dem.per=ev.target.value;else S.dem.mes=ev.target.value;renderExtratoCorr();return}
   if(!S.editing)return;const d=S.editing.data;
   if(id==="fileInput"){uploadFiles(ev.target.files);ev.target.value="";return}
