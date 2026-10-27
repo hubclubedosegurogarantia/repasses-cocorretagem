@@ -403,8 +403,14 @@ function renderRepTabs(){
   n.innerHTML=card("pagar")+card("receber");
 }
 // meses mostrados: 5 antes e 6 depois do mês aberto, mais qualquer mês com parcela em aberto (atrasos e parcelas futuras)
+// Primeiro mês "devendo": o mais antigo com parcela em aberto; se não houver atraso, o mês atual.
+// Gráfico e faixa de meses começam nele e avançam sozinhos quando as dívidas são quitadas e o mês vira.
+function mesInicio(dir){const atual=ym(new Date());
+  const ab=S.docs.filter(d=>(!dir||dirDe(d)===dir)&&!d.pago&&d.competencia).map(d=>d.competencia).sort()[0];
+  return ab&&ab<atual?ab:atual}
 function mesesFaixa(dir){
-  const set=new Set();for(let i=-5;i<=6;i++)set.add(shiftYM(S.month,i));
+  const ini=mesInicio(dir)<S.month?mesInicio(dir):S.month;
+  const set=new Set([S.month]);for(let i=0;i<12;i++)set.add(shiftYM(ini,i));
   const lim=shiftYM(S.month,24);
   S.docs.forEach(d=>{if((!dir||dirDe(d)===dir)&&!d.pago&&d.competencia&&d.competencia<=lim)set.add(d.competencia)});
   return [...set].sort();
@@ -437,7 +443,7 @@ function renderDashboard(P){
   const ano=S.month.slice(0,4);const md=monthDocs();const sumv=l=>l.reduce((a,d)=>a+(Number(d.valor_repasse)||0),0);
   const pg=md.filter(d=>dirDe(d)==="pagar"&&!d.pago),rc=md.filter(d=>dirDe(d)==="receber"&&!d.pago),od=overdue();
   const prox=S.cfgL?(proximosLembretes(S.cfgL,1)[0]||{}).dt||null:null;
-  const meses=Array.from({length:12},(_,i)=>shiftYM(S.month,i-11));
+  const ini=mesInicio();const meses=Array.from({length:12},(_,i)=>shiftYM(ini,i));
   const serie=meses.map(m=>{const l=S.docs.filter(d=>d.competencia===m);const p=l.filter(d=>dirDe(d)==="pagar"),r=l.filter(d=>dirDe(d)==="receber");
     return {m,pagar:sumv(p),receber:sumv(r),pAberto:sumv(p.filter(d=>!d.pago)),rAberto:sumv(r.filter(d=>!d.pago)),n:l.length}});
   const maxV=Math.max(1,...serie.map(x=>Math.max(x.pagar,x.receber)));
@@ -463,8 +469,8 @@ function renderDashboard(P){
       <button type="button" class="stat go" data-action="kpi" data-go="notif"><label>Próximo lembrete</label><div class="v txt">${prox?esc(prox.toLocaleDateString("pt-BR",{day:"2-digit",month:"short"}).replace(".","")):"—"}</div><small>${prox?esc(prox.toLocaleDateString("pt-BR",{weekday:"long"}))+` às ${String(prox.getHours()).padStart(2,"0")}h`:"configure em Notificações"}</small></button>
     </section>
     <div class="dash">
-      <section class="cardbox wide chartbox"><div class="cb-head"><h3>Comissões mês a mês</h3><span class="meta">A pagar e a receber · 12 meses até ${esc(monthShort(S.month))}</span><span class="spacer"></span><span class="legend"><i class="lg s-out"></i>A pagar <i class="lg s-in"></i>A receber</span></div>
-        ${vazio?`<p class="meta" style="padding:28px 0;text-align:center">Nenhuma cocorretagem nos últimos 12 meses.</p>`:`<div class="chartwrap"><svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Comissões a pagar e a receber, mês a mês">
+      <section class="cardbox wide chartbox"><div class="cb-head"><h3>Comissões mês a mês</h3><span class="meta">A pagar e a receber · de ${esc(monthShort(meses[0]))} a ${esc(monthShort(meses[11]))}</span><span class="spacer"></span><span class="legend"><i class="lg s-out"></i>A pagar <i class="lg s-in"></i>A receber</span></div>
+        ${vazio?`<p class="meta" style="padding:28px 0;text-align:center">Nenhuma cocorretagem neste período.</p>`:`<div class="chartwrap"><svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Comissões a pagar e a receber, mês a mês">
           ${ticks.map(t=>`<line x1="${L}" x2="${W-R}" y1="${y(t)}" y2="${y(t)}" class="grid"/><text x="${L-8}" y="${y(t)+4}" text-anchor="end" class="axis">${t?"R$ "+kfmt(t):"0"}</text>`).join("")}
           ${bars}</svg><div class="tip" id="tip" hidden></div></div>`}
         <details class="tableview"><summary>Ver em tabela</summary><div class="tablebox"><table><thead><tr><th>Mês</th><th class="r">Parcelas</th><th class="r">A pagar</th><th class="r">em aberto</th><th class="r">A receber</th><th class="r">em aberto</th></tr></thead><tbody>${serie.map(x=>`<tr><td>${esc(monthName(x.m))}</td><td class="r num">${x.n}</td><td class="r num">${money(x.pagar)}</td><td class="r num">${money(x.pAberto)}</td><td class="r num">${money(x.receber)}</td><td class="r num">${money(x.rAberto)}</td></tr>`).join("")}</tbody></table></div></details>
