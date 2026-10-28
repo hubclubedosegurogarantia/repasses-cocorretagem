@@ -242,7 +242,8 @@ async function lembreteFechamento(em: Em, ym: string, opts: { soEmail?: string; 
   return { fechamento: "enviado", ...email, ...push };
 }
 // Penúltimo dia do mês: "verifique se faltou alguma pendência" (sai sempre, mesmo sem nada em aberto)
-async function lembretePendencias(em: Em, ym: string, hora: number) {
+async function lembretePendencias(em: Em, ym: string, hora: number, opts: { soEmail?: string; teste?: boolean } = {}) {
+  const T = opts.teste ? "[Teste] " : "";
   const r = await resumo(em, ym);
   const P = r.pagarMes.total + r.pagarAtraso.total, R = r.receberMes.total + r.receberAtraso.total;
   const titulo = `Faltou alguma pendência em ${nomeMes(ym)}?`;
@@ -251,14 +252,14 @@ async function lembretePendencias(em: Em, ym: string, hora: number) {
     : `O mês está acabando e não há nenhuma parcela em aberto.`)
     + ` Confira também se todas as apólices do mês foram lançadas no app.`;
   const resumoTxt = r.nMes || r.nAtraso ? `em aberto: pagar ${brl(P)} · receber ${brl(R)}` : "nada em aberto · confira se lançou todas as apólices";
-  const email = await enviarEmail(await destinatariosEmail(em, "pendencias"), `${titulo} · ${resumoTxt}`, emailHtml(r, titulo, intro), emailTexto(r, titulo));
-  const push = await enviarPush({ title: titulo, body: resumoTxt.charAt(0).toUpperCase() + resumoTxt.slice(1), tag: `pendencias-${hora}`, url: APP_URL ? `${APP_URL}#repasses` : undefined }, undefined, "pendencias");
-  await registrar(em, "pendencias", titulo, resumoTxt, { ...email, ...push });
+  const email = await enviarEmail(await destinatariosEmail(em, "pendencias", opts.soEmail), `${T}${titulo} · ${resumoTxt}`, emailHtml(r, T + titulo, intro), emailTexto(r, T + titulo));
+  const push = await enviarPush({ title: T + titulo, body: resumoTxt.charAt(0).toUpperCase() + resumoTxt.slice(1), tag: `pendencias-${hora}`, url: APP_URL ? `${APP_URL}#repasses` : undefined }, opts.soEmail ? { soEmail: opts.soEmail } : undefined, "pendencias");
+  await registrar(em, opts.teste ? "teste" : "pendencias", T + titulo, resumoTxt, { ...email, ...push });
   return { pendencias: "enviado", ...email, ...push };
 }
 // Último dia do mês: "baixe o relatório mensal"
-async function lembreteRelatorio(em: Em, ym: string) {
-  const titulo = `Baixe o relatório de ${nomeMes(ym)}`;
+async function lembreteRelatorio(em: Em, ym: string, opts: { soEmail?: string; teste?: boolean } = {}) {
+  const titulo = `${opts.teste ? "[Teste] " : ""}Baixe o relatório de ${nomeMes(ym)}`;
   const link = APP_URL ? `${APP_URL}#relatorios` : "";
   const html = `<!doctype html><html><body style="margin:0;background:#F4F5F7;font-family:Poppins,Segoe UI,Arial,sans-serif">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F4F5F7;padding:24px 12px"><tr><td align="center">
@@ -270,9 +271,9 @@ async function lembreteRelatorio(em: Em, ym: string) {
     <tr><td style="padding:16px 26px 24px;color:#5A6679;font-size:12px">Para deixar de receber este e-mail, abra o app → Notificações.</td></tr>
   </table></td></tr></table></body></html>`;
   const texto = [titulo, "", "Último dia do mês. Abra Relatórios no app e baixe o relatório mensal de comissões (PDF ou Excel).", link ? `\nAbrir: ${link}` : ""].join("\n");
-  const email = await enviarEmail(await destinatariosEmail(em, "relatorio"), titulo, html, texto);
-  const push = await enviarPush({ title: titulo, body: "Último dia do mês: baixe o relatório mensal em Relatórios.", tag: "relatorio", url: link || undefined }, undefined, "relatorio");
-  await registrar(em, "relatorio", titulo, "relatório mensal", { ...email, ...push });
+  const email = await enviarEmail(await destinatariosEmail(em, "relatorio", opts.soEmail), titulo, html, texto);
+  const push = await enviarPush({ title: titulo, body: "Último dia do mês: baixe o relatório mensal em Relatórios.", tag: "relatorio", url: link || undefined }, opts.soEmail ? { soEmail: opts.soEmail } : undefined, "relatorio");
+  await registrar(em, opts.teste ? "teste" : "relatorio", titulo, "relatório mensal", { ...email, ...push });
   return { relatorio: "enviado", ...email, ...push };
 }
 // ------------------------------------------------------------------ avisos por vencimento
@@ -331,6 +332,18 @@ async function avisosVencimento(em: Em, now: ReturnType<typeof agoraBrasilia>, c
       corretor: c.corretor, seguradora: c.seguradora, valor: Number(p.valor || 0), vencimento: String(p.vencimento).slice(0, 10),
       parcela: (c.parcelas_qtd || 1) > 1 ? `${p.numero}/${c.parcelas_qtd}` : "",
     });
+  }
+  if (!itens.length && opts.teste) {
+    // teste sem cobrança no dia: usa até 3 parcelas em aberto (as já vencidas primeiro) só para mostrar o modelo do e-mail
+    // deno-lint-ignore no-explicit-any
+    const ab = (rows as any[]).slice().sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+    const ord = [...ab.filter((p) => String(p.vencimento) <= now.iso).reverse(), ...ab.filter((p) => String(p.vencimento) > now.iso)].slice(0, 3);
+    for (const p of ord) {
+      const c = Array.isArray(p.cocorretagens) ? p.cocorretagens[0] : p.cocorretagens;
+      itens.push({ pid: p.id, dias: 5, todos: [5], data: now.iso, dir: c.lider === "parceira" ? "receber" : "pagar", apolice: c.apolice, grupo: c.emitida_por ?? null,
+        corretor: c.corretor, seguradora: c.seguradora, valor: Number(p.valor || 0), vencimento: String(p.vencimento).slice(0, 10),
+        parcela: (c.parcelas_qtd || 1) > 1 ? `${p.numero}/${c.parcelas_qtd}` : "" });
+    }
   }
   if (!itens.length) return { avisos: "nada hoje" };
   const vence = itens.filter((a) => a.dias === 0), pagou = itens.filter((a) => a.dias > 0 && a.dir === "pagar"), recebeu = itens.filter((a) => a.dias > 0 && a.dir === "receber");
@@ -429,9 +442,12 @@ Deno.serve(async (req) => {
       const { data: ok } = await admin.from("autorizados").select("nome").eq("email", email).maybeSingle();
       if (!ok) return json({ erro: "não autorizado" }, 403);
       const em = await emissoraPorId(corpo.emissora_id);
-      const r1 = await lembreteFechamento(em, agoraBrasilia().ym, { soEmail: email, teste: true });
-      const r2 = await avisosVencimento(em, agoraBrasilia(), await carregarConfig(em), { soEmail: email, teste: true });
-      return json({ ...r1, vencimentos: r2 });
+      // os 3 e-mails da rotina, só para quem clicou: cobranças, pendências do fim do mês e relatório
+      const agora = agoraBrasilia(), o = { soEmail: email, teste: true };
+      const cobrancas = await avisosVencimento(em, agora, await carregarConfig(em), o);
+      const pendencias = await lembretePendencias(em, agora.ym, agora.hora, o);
+      const relatorio = await lembreteRelatorio(em, agora.ym, o);
+      return json({ cobrancas, pendencias, relatorio });
     }
 
     if (!CRON_SECRET || req.headers.get("x-cron-secret") !== CRON_SECRET) return json({ erro: "não autorizado" }, 401);
