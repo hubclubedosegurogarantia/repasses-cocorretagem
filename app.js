@@ -2109,8 +2109,9 @@ async function lembTeste(){
   const {data,error}=await sb.functions.invoke("lembretes",{body:{tipo:"teste",emissora_id:S.emisId}});
   if(b){b.disabled=false;b.textContent="Enviar teste agora"}
   if(error){toast("A função de lembretes ainda não está publicada (README, passo 6).");return}
-  const partes=[];if(data){if(data.email==="enviado")partes.push("e-mail enviado");else if(data.email)partes.push("e-mail: "+data.email);if(data.push)partes.push("push: "+data.push)}
-  toast(partes.length?partes.join(" · "):"Teste enviado.");
+  const l=data?[data.cobrancas,data.pendencias,data.relatorio].filter(Boolean):[];const ok=l.filter(x=>x.email==="enviado").length;
+  const erro=l.map(x=>x.email).find(e=>e&&e!=="enviado");
+  toast(ok?`${ok} e-mail${ok>1?"s":""} de teste enviado${ok>1?"s":""} só para você: cobranças, pendências e relatório.`:erro?"E-mail: "+erro:"Teste enviado.");
 }
 
 // ----- destinatários do e-mail de lembrete -----
