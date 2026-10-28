@@ -168,7 +168,7 @@ on conflict (id) do update set vapid_publica = excluded.vapid_publica, vapid_pri
     if smtp:
         m = re.match(r"\s*(.*?)\s*<\s*([^>]+)\s*>\s*$", email_from)
         nome_rem, end_rem = (m.group(1).strip('" '), m.group(2)) if m else ("Clube do Seguro Garantia", email_from)
-        auth.update({"smtp_admin_email": end_rem, "smtp_host": "smtp.resend.com", "smtp_port": 465, "smtp_user": "resend",
+        auth.update({"smtp_admin_email": end_rem, "smtp_host": "smtp.resend.com", "smtp_port": "465", "smtp_user": "resend",
                      "smtp_pass": resend, "smtp_sender_name": nome_rem or "Clube do Seguro Garantia"})
     elif resend:
         aviso("Defina a variável EMAIL_FROM (com o domínio verificado no Resend) para os e-mails de senha saírem pelo Resend e chegarem a toda a equipe.")
