@@ -349,6 +349,14 @@ async function avisosVencimento(em: Em, now: ReturnType<typeof agoraBrasilia>, c
   const vence = itens.filter((a) => a.dias === 0), pagou = itens.filter((a) => a.dias > 0 && a.dir === "pagar"), recebeu = itens.filter((a) => a.dias > 0 && a.dir === "receber");
   const partes = [pagou.length ? `${pagou.length} a pagar` : "", recebeu.length ? `${recebeu.length} a cobrar` : "", vence.length ? `${vence.length} vencendo hoje` : ""].filter(Boolean);
   const titulo = `${opts.teste ? "[Teste] " : ""}Cobranças de hoje`;
+  const nd = Math.max(...dias.filter((n) => n > 0), 5);
+  const intro = [
+    opts.teste ? `<b>Este é um teste.</b> As parcelas abaixo são exemplos de parcelas em aberto. Não clique nos botões: eles dão baixa de verdade.<br><br>` : "",
+    `${itens.length > 1 ? "Estas parcelas venceram" : "Esta parcela venceu"} há ${nd} dias e ainda não ${itens.length > 1 ? "têm" : "tem"} baixa no Hub.`,
+    pagou.length ? `<br><br><b>A pagar:</b> o Clube já recebeu a comissão da seguradora e precisa repassar a parte do corretor.` : "",
+    recebeu.length ? `<br><br><b>A cobrar:</b> o corretor líder já recebeu a comissão e precisa repassar a parte do Clube.` : "",
+    `<br><br>Se já foi feito, clique em <b>Já paguei</b> ou <b>Já recebi</b> e o aviso para.`,
+  ].join("");
   for (const a of itens) a.tk = await assinar(a.pid, opts.soEmail || "e-mail");
   const lista = (l: Av[], cor: string, rot: string) => !l.length ? "" : `<tr><td style="padding:14px 26px 4px"><div style="font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:${cor};margin-bottom:8px">${esc(rot)}</div>
     ${l.map((a) => `<div style="padding:10px 12px;border:1px solid #ECEFF3;border-radius:8px;margin-bottom:8px"><div style="font-size:15px;font-weight:600;color:#0D1E36">${esc(pergunta(a))} <span style="float:right;white-space:nowrap;color:${a.dir === "pagar" ? "#022D5B" : "#8A6740"}">${brl(a.valor)}</span></div><div style="font-size:12px;color:#5A6679;margin-top:3px">${esc(linhaAv(a))}</div>${a.tk && APP_URL ? `<div style="margin-top:9px"><a href="${esc(APP_URL)}#baixa=${a.tk}" style="display:inline-block;background:${a.dir === "pagar" ? "#022D5B" : "#B99269"};color:${a.dir === "pagar" ? "#ffffff" : "#00214C"};text-decoration:none;font-weight:600;font-size:13px;padding:8px 14px;border-radius:7px">${a.dir === "pagar" ? "Já paguei" : "Já recebi"}</a></div>` : ""}</div>`).join("")}</td></tr>`;
@@ -357,7 +365,7 @@ async function avisosVencimento(em: Em, now: ReturnType<typeof agoraBrasilia>, c
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:12px;overflow:hidden">
     <tr><td style="background:#022D5B;padding:22px 26px;border-bottom:3px solid #B99269"><div style="color:#C7A887;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:600">Clube do Seguro Garantia · ${esc(em.nome)}</div>
       <div style="color:#ffffff;font-size:20px;font-weight:600;margin-top:4px">${esc(titulo)}</div></td></tr>
-    <tr><td style="padding:20px 26px 4px;color:#0D1E36;font-size:14px;line-height:1.55">A comissão cai na conta da corretora líder um dia depois do vencimento de cada parcela. Hoje: <b>${esc(partes.join(", "))}</b>. Depois de pagar ou receber, toque em <b>Já paguei</b> ou <b>Já recebi</b> e as cobranças daquela parcela param.${opts.teste ? " <i>(Teste: os botões dão baixa de verdade.)</i>" : ""}</td></tr>
+    <tr><td style="padding:20px 26px 4px;color:#0D1E36;font-size:14px;line-height:1.55">${intro}</td></tr>
     ${lista(pagou, "#022D5B", "Pagar à parceira")}${lista(recebeu, "#8A6740", "Cobrar da parceira")}${lista(vence, "#3A5877", "Vencem hoje")}
     ${APP_URL ? `<tr><td style="padding:18px 26px 8px"><a href="${esc(APP_URL)}#notificacoes" style="display:inline-block;background:#022D5B;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 20px;border-radius:9px">Confirmar no app</a></td></tr>` : ""}
     <tr><td style="padding:16px 26px 24px;color:#5A6679;font-size:12px">Cobranças às ${horasDe(cfg).map((h) => h + "h").join(" e ")}, ${dias.map((n) => n === 0 ? "no dia do vencimento" : `${n} dia${n > 1 ? "s" : ""} depois do vencimento`).join(" e ")}, em dia útil. Ajuste em Notificações.</td></tr>
